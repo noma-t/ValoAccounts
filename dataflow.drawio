@@ -1,0 +1,36 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" version="29.3.8">
+  <diagram name="ページ-1" id="Xwn0RpEXyJ5Oh_5m7Hlf">
+    <mxGraphModel dx="983" dy="512" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-6" edge="1" parent="1" source="cRbS0PkcZUHcCWphcWwd-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="cRbS0PkcZUHcCWphcWwd-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="アカウント追加:New" vertex="1">
+          <mxGeometry height="40" width="160" x="80" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="アカウント追加:Current" vertex="1">
+          <mxGeometry height="40" width="160" x="80" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-11" edge="1" parent="1" source="cRbS0PkcZUHcCWphcWwd-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="cRbS0PkcZUHcCWphcWwd-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-12" connectable="0" parent="cRbS0PkcZUHcCWphcWwd-11" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="No" vertex="1">
+          <mxGeometry relative="1" x="-0.8586" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-5" parent="1" style="rhombus;whiteSpace=wrap;html=1;" value="Data作成済" vertex="1">
+          <mxGeometry height="50" width="110" x="290" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Data作成&lt;div&gt;_unselected作成&lt;/div&gt;&lt;div&gt;Riot/Dataを_unselectedに移動&lt;/div&gt;&lt;div&gt;Riot/に_unselectedへのSymLink作成&lt;/div&gt;" vertex="1">
+          <mxGeometry height="70" width="217" x="370" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="cRbS0PkcZUHcCWphcWwd-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="アカウントディレクトリ作成" vertex="1">
+          <mxGeometry height="60" width="120" x="450" y="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
