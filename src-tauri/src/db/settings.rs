@@ -6,7 +6,7 @@ pub fn get_settings() -> Result<Settings, String> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, active_account_id, riot_client_service_path, riot_client_data_path, account_data_path, henrikdev_api_key, launched, created_at, updated_at
+            "SELECT id, active_account_id, riot_client_service_path, riot_client_data_path, account_data_path, henrikdev_api_key, region, launched, created_at, updated_at
              FROM settings
              WHERE id = 1",
         )
@@ -21,9 +21,10 @@ pub fn get_settings() -> Result<Settings, String> {
                 riot_client_data_path: row.get(3)?,
                 account_data_path: row.get(4)?,
                 henrikdev_api_key: row.get(5)?,
-                launched: row.get::<_, i64>(6)? != 0,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                region: row.get(6)?,
+                launched: row.get::<_, i64>(7)? != 0,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -74,13 +75,15 @@ pub fn update_settings(update: UpdateSettings) -> Result<Settings, String> {
          SET riot_client_service_path = COALESCE(?1, riot_client_service_path),
              riot_client_data_path = COALESCE(?2, riot_client_data_path),
              account_data_path = COALESCE(?3, account_data_path),
-             henrikdev_api_key = COALESCE(?4, henrikdev_api_key)
+             henrikdev_api_key = COALESCE(?4, henrikdev_api_key),
+             region = COALESCE(?5, region)
          WHERE id = 1",
         (
             &update.riot_client_service_path,
             &update.riot_client_data_path,
             &update.account_data_path,
             &update.henrikdev_api_key,
+            &update.region,
         ),
     )
     .map_err(|e| e.to_string())?;

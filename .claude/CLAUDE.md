@@ -167,7 +167,18 @@ pnpm test
 
 ## Git ワークフロー
 
-- Conventional Commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
+- Conventional Commits:
+  - `feat:` - 新機能
+  - `fix:` - バグ修正
+  - `refactor:` - リファクタリング (機能変更なし)
+  - `docs:` - ドキュメント変更
+  - `test:` - テスト追加・修正
+  - `chore:` - 雑務・保守 (ビルド設定、依存関係更新など)
+  - `perf:` - パフォーマンス改善
+  - `ci:` - CI/CD 設定変更
+  - `build:` - ビルドシステム変更
+  - `style:` - コードスタイル変更 (フォーマット、セミコロンなど)
+  - `revert:` - コミットの取り消し
 - メインへの直接コミットは禁止
 - すべてのテストがパスしてから merge
 - コミット前にローカルで検証

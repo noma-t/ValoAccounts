@@ -3,8 +3,24 @@ import { listAccounts, updateAccount, getSettings, switchAccount } from '../lib/
 import { RANK_ICON_MAP } from '../types/account'
 import type { Account, UpdateAccount, ValorantRank } from '../types/account'
 import { EditAccountModal } from '../components/EditAccountModal'
+import { useToast } from '../components/Toast'
+
+const TIER_ID_TO_RANK: Record<number, string | null> = {
+  0: null,
+  1: 'Unknown', 2: 'Unknown',
+  3: 'Iron 1', 4: 'Iron 2', 5: 'Iron 3',
+  6: 'Bronze 1', 7: 'Bronze 2', 8: 'Bronze 3',
+  9: 'Silver 1', 10: 'Silver 2', 11: 'Silver 3',
+  12: 'Gold 1', 13: 'Gold 2', 14: 'Gold 3',
+  15: 'Platinum 1', 16: 'Platinum 2', 17: 'Platinum 3',
+  18: 'Diamond 1', 19: 'Diamond 2', 20: 'Diamond 3',
+  21: 'Ascendant 1', 22: 'Ascendant 2', 23: 'Ascendant 3',
+  24: 'Immortal 1', 25: 'Immortal 2', 26: 'Immortal 3',
+  27: 'Radiant',
+}
 
 function rankIconPath(rank: string | null): string {
+  if (rank === 'Unknown') return '/rank_icon/error.png'
   const key = (rank ?? 'Unranked') as ValorantRank
   return `/rank_icon/${RANK_ICON_MAP[key] ?? 'unranked'}.png`
 }
@@ -16,6 +32,7 @@ interface AccountCardProps {
   onCopyPassword: () => void
   onSettings: () => void
   onSelect: () => void
+  onRefreshRank: () => Promise<void>
   isSelected: boolean
   selectDisabled: boolean
   hasApiKey: boolean
@@ -43,14 +60,26 @@ const CARD_STYLES = {
   buttonOverlay: "absolute inset-0"
 }
 
-function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettings, onSelect, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
+function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
   const [isRefreshingRank, setIsRefreshingRank] = useState(false)
 
-  function handleRefreshRank(e: React.MouseEvent) {
+  const canRefresh = hasApiKey && !!account.riot_id && !!account.tagline
+
+  const refreshTitle = !hasApiKey
+    ? 'API key is not set'
+    : !account.riot_id || !account.tagline
+      ? 'Riot ID and tagline are required'
+      : 'Refresh rank'
+
+  async function handleRefreshRank(e: React.MouseEvent) {
     e.stopPropagation()
-    if (isRefreshingRank || !hasApiKey) return
+    if (isRefreshingRank || !canRefresh) return
     setIsRefreshingRank(true)
-    // TODO: API通信実装時はここで呼び出し
+    try {
+      await onRefreshRank()
+    } finally {
+      setIsRefreshingRank(false)
+    }
   }
 
   return (
@@ -66,14 +95,14 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettin
             isRefreshingRank
               ? 'opacity-100'
               : 'opacity-0 group-hover/rank:opacity-100'
-          } ${!hasApiKey ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          } ${!canRefresh ? 'cursor-not-allowed' : 'cursor-pointer'}`}
           onClick={handleRefreshRank}
-          title={!hasApiKey ? 'API key is not set' : 'Refresh rank'}
+          title={refreshTitle}
         >
           <img
             src="/refresh-icon.svg"
             alt="Refresh rank"
-            className={`w-4 h-4 ${isRefreshingRank ? 'animate-spin' : ''} ${!hasApiKey ? 'opacity-40' : ''}`}
+            className={`w-4 h-4 ${isRefreshingRank ? 'animate-spin' : ''} ${!canRefresh ? 'opacity-40' : ''}`}
           />
         </div>
       </div>
@@ -145,6 +174,7 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettin
 }
 
 export function AccountsPage({ refreshToken, riotClientRunning = false, valorantRunning = false, hasApiKey = false }: AccountsPageProps) {
+  const { toast } = useToast()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
@@ -188,6 +218,55 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
     loadAccounts()
   }
 
+  async function handleRefreshRank(account: Account) {
+    try {
+      const settings = await getSettings()
+      const region = settings.region ?? 'ap'
+      const apiKey = settings.henrikdev_api_key
+      if (!apiKey) return
+
+      const response = await fetch(
+        `https://api.henrikdev.xyz/valorant/v3/mmr/${region}/pc/${encodeURIComponent(account.riot_id)}/${encodeURIComponent(account.tagline)}`,
+        { headers: { 'Authorization': apiKey } }
+      )
+
+      if (!response.ok) {
+        switch (response.status) {
+          case 400: toast('warning', 'Invalid request'); return
+          case 403: toast('error', 'API access forbidden'); return
+          case 404: toast('warning', 'Player not found'); return
+          case 408: toast('warning', 'Request timed out'); return
+          case 429: toast('warning', 'Rate limit reached, try again later'); return
+          case 503: toast('error', 'Riot API is unavailable'); return
+          default: toast('error', `Rank fetch failed (${response.status})`); return
+        }
+      }
+
+      const json = await response.json()
+      const tierId: number | undefined = json?.data?.current?.tier?.id
+
+      if (tierId === undefined) {
+        toast('error', 'Unexpected API response')
+        return
+      }
+
+      const rank = TIER_ID_TO_RANK[tierId] ?? null
+
+      await updateAccount({
+        id: account.id,
+        riot_id: account.riot_id,
+        tagline: account.tagline,
+        username: account.username,
+        password: null,
+        rank,
+      })
+
+      loadAccounts()
+    } catch {
+      toast('error', 'Failed to fetch rank')
+    }
+  }
+
   async function handleSelect(accountId: number) {
     if (isSwitching) return
 
@@ -220,6 +299,7 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
             onCopyPassword={() => handleCopyPassword(account.id)}
             onSettings={() => handleSettings(account)}
             onSelect={() => handleSelect(account.id)}
+            onRefreshRank={() => handleRefreshRank(account)}
             isSelected={selectedAccountId === account.id}
             selectDisabled={selectDisabled}
             hasApiKey={hasApiKey}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Layout } from './components/Layout'
 import { AddAccountModal } from './components/AddAccountModal'
+import { ToastProvider } from './components/Toast'
 import { AccountsPage } from './pages/AccountsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { getSettings, markLaunched, addAccount, checkCurrentDataAvailable, getRiotClientStatus, getValorantStatus, killRiotClient, launchRiotClient } from './lib/tauri'
@@ -127,13 +128,12 @@ function App() {
   }
 
   return (
-    <>
+    <ToastProvider>
       <Layout
         navigationItems={navigationItems}
         activeItemId={activePage ?? 'accounts'}
         onNavigate={setActivePage}
         onAddAccount={handleOpenAddAccount}
-        hasApiKey={hasApiKey}
         riotClientRunning={riotClientRunning}
         valorantRunning={valorantRunning}
         onKillRiotClient={handleKillRiotClient}
@@ -150,7 +150,7 @@ function App() {
         onClose={() => setIsAddAccountModalOpen(false)}
         onSubmit={handleAddAccount}
       />
-    </>
+    </ToastProvider>
   )
 }
 

@@ -6,7 +6,6 @@ interface NavigationProps {
   activeItemId?: string
   onNavigate?: (itemId: string) => void
   onAddAccount?: () => void
-  hasApiKey?: boolean
   riotClientRunning?: boolean
   valorantRunning?: boolean
   onKillRiotClient?: () => void
@@ -18,7 +17,6 @@ export function Navigation({
   activeItemId,
   onNavigate,
   onAddAccount,
-  hasApiKey = false,
   riotClientRunning = false,
   valorantRunning = false,
   onKillRiotClient,
@@ -54,15 +52,6 @@ export function Navigation({
           onClick={onAddAccount}
         >
           + Add Account
-        </button>
-        <button
-          className="w-full px-4 py-1.5 bg-neutral-900 border border-neutral-600/50 hover:border-neutral-500/50 active:bg-neutral-800 rounded-md text-sm transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-neutral-600/50 flex items-center justify-center gap-1.5"
-          type="button"
-          disabled={!hasApiKey}
-          title={!hasApiKey ? 'API key is not set' : undefined}
-        >
-          <img src="/refresh-icon.svg" alt="" width={11} height={11} />
-          Rank Refresh
         </button>
 
         <div>
