@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use winapi::um::fileapi::{CreateFileW, GetFileAttributesW, INVALID_FILE_ATTRIBUTES, OPEN_EXISTING};
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -88,6 +89,7 @@ pub fn create_junction(link: &Path, target: &Path) -> Result<(), String> {
             &link.to_string_lossy(),
             &target.to_string_lossy(),
         ])
+        .creation_flags(0x08000000)
         .output()
         .map_err(|e| format!("Failed to execute mklink command: {}", e))?;
 

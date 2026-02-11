@@ -8,6 +8,7 @@ use db::{
     update_account, update_settings, CreateAccountData, NewAccount, Settings, UpdateAccount,
     UpdateSettings,
 };
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use tauri::Manager;
 
@@ -171,6 +172,7 @@ fn perform_account_switch(account_id: Option<i64>) -> Result<(), String> {
     // This is safe because we've already moved any real data
     let output = std::process::Command::new("cmd")
         .args(["/C", "rmdir", &riot_data_path.to_string_lossy()])
+        .creation_flags(0x08000000)
         .output();
 
     if let Ok(out) = output {
