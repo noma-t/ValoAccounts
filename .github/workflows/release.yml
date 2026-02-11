@@ -90,38 +90,38 @@ jobs:
             } elseif ($commit -match '^(refactor|docs|chore|revert)(\(.+\))?!?:\s*(.+)$') {
               $others.Add("- $($Matches[3])")
             }
-            # test, ci, build, style は除外
+            # exclude test, ci, build, style
           }
 
           $lines = [System.Collections.Generic.List[string]]::new()
 
           if ($features.Count -gt 0) {
-            $lines.Add("## ✨ 新機能")
+            $lines.Add("## New Features")
             $lines.Add("")
             $lines.AddRange($features)
             $lines.Add("")
           }
           if ($fixes.Count -gt 0) {
-            $lines.Add("## 🐛 バグ修正")
+            $lines.Add("## Bug Fixes")
             $lines.Add("")
             $lines.AddRange($fixes)
             $lines.Add("")
           }
           if ($perfs.Count -gt 0) {
-            $lines.Add("## ⚡ パフォーマンス改善")
+            $lines.Add("## Performance Improvements")
             $lines.Add("")
             $lines.AddRange($perfs)
             $lines.Add("")
           }
           if ($others.Count -gt 0) {
-            $lines.Add("## 🔧 その他の変更")
+            $lines.Add("## Other Changes")
             $lines.Add("")
             $lines.AddRange($others)
             $lines.Add("")
           }
 
           if ($lines.Count -eq 0) {
-            $lines.Add("このリリースの変更内容はコミットログをご確認ください。")
+            $lines.Add("No notable changes. Please refer to the commit log for details.")
           }
 
           $lines -join "`n" | Out-File -FilePath "release_notes.md" -Encoding utf8
