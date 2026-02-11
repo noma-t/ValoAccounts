@@ -18,16 +18,19 @@ pub fn get_or_create_encryption_key() -> Result<Vec<u8>, String> {
 
     match entry.get_password() {
         Ok(key_str) => {
+            log::info!("[keyring] found existing encryption key in Credential Manager");
             general_purpose::STANDARD
                 .decode(&key_str)
                 .map_err(|e| format!("Failed to decode encryption key: {}", e))
         }
-        Err(_) => {
+        Err(e) => {
+            log::warn!("[keyring] key not found ({}), generating new key", e);
             let new_key = generate_random_key();
             let key_str = general_purpose::STANDARD.encode(&new_key);
             entry
                 .set_password(&key_str)
                 .map_err(|e| format!("Failed to store encryption key: {}", e))?;
+            log::info!("[keyring] new encryption key generated and stored");
             Ok(new_key)
         }
     }

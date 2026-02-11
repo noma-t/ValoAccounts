@@ -194,6 +194,52 @@ fn perform_account_switch(account_id: Option<i64>) -> Result<(), String> {
     Ok(())
 }
 
+fn set_clipboard_text(text: &str) -> Result<(), String> {
+    use std::ffi::OsStr;
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+    use winapi::um::winbase::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    use winapi::um::winuser::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData, CF_UNICODETEXT};
+
+    let wide: Vec<u16> = OsStr::new(text).encode_wide().chain(once(0)).collect();
+    let byte_size = wide.len() * std::mem::size_of::<u16>();
+
+    unsafe {
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_size);
+        if hmem.is_null() {
+            return Err("Failed to allocate clipboard memory".to_string());
+        }
+        let ptr = GlobalLock(hmem) as *mut u16;
+        if ptr.is_null() {
+            return Err("Failed to lock clipboard memory".to_string());
+        }
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
+        GlobalUnlock(hmem);
+
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return Err("Failed to open clipboard".to_string());
+        }
+        EmptyClipboard();
+        if SetClipboardData(CF_UNICODETEXT, hmem as _).is_null() {
+            CloseClipboard();
+            return Err("Failed to set clipboard data".to_string());
+        }
+        CloseClipboard();
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn copy_account_password(account_id: i64) -> Result<(), String> {
+    let account = get_account(account_id)?;
+    if account.encrypted_password.is_empty() {
+        return Err("No password stored".to_string());
+    }
+    let password = crypto::dpapi::unprotect_password(&account.encrypted_password)?;
+    set_clipboard_text(&password)
+}
+
 #[tauri::command]
 fn switch_account(account_id: Option<i64>) -> Result<(), String> {
     log::info!("Starting account switch: {:?}", account_id);
@@ -253,7 +299,8 @@ pub fn run() {
             get_riot_client_status,
             kill_riot_client,
             launch_riot_client,
-            get_valorant_status
+            get_valorant_status,
+            copy_account_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

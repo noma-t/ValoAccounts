@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import type { Settings, UpdateSettings } from '../types/settings'
 import type { Account, CreateAccount, UpdateAccount } from '../types/account'
 
@@ -60,4 +61,13 @@ export async function launchRiotClient(): Promise<void> {
 
 export async function switchAccount(accountId: number | null): Promise<void> {
   return invoke('switch_account', { accountId })
+}
+
+export async function copyAccountPassword(accountId: number): Promise<void> {
+  return invoke('copy_account_password', { accountId })
+}
+
+export async function openTrackerProfile(riotId: string, tagline: string): Promise<void> {
+  const url = `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(`${riotId}#${tagline}`)}`
+  return openUrl(url)
 }
