@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -48,6 +49,7 @@ pub fn check_valorant_running() -> bool {
 pub fn kill_riot_client() -> Result<(), String> {
     let output = std::process::Command::new("taskkill")
         .args(["/F", "/IM", "RiotClientServices.exe"])
+        .creation_flags(0x08000000)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -83,6 +85,7 @@ pub fn launch_riot_client() -> Result<(), String> {
     for path in &candidates {
         if std::path::Path::new(path).exists() {
             std::process::Command::new(path)
+                .creation_flags(0x08000000)
                 .spawn()
                 .map_err(|e| e.to_string())?;
             return Ok(());
