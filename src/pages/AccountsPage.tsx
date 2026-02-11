@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { listAccounts, updateAccount, getSettings, switchAccount } from '../lib/tauri'
+import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile } from '../lib/tauri'
 import { RANK_ICON_MAP } from '../types/account'
 import type { Account, UpdateAccount, ValorantRank } from '../types/account'
 import { EditAccountModal } from '../components/EditAccountModal'
@@ -30,6 +30,7 @@ interface AccountCardProps {
   onCopyRiotId: () => void
   onCopyId: () => void
   onCopyPassword: () => void
+  onOpenTracker: () => void
   onSettings: () => void
   onSelect: () => void
   onRefreshRank: () => Promise<void>
@@ -60,7 +61,7 @@ const CARD_STYLES = {
   buttonOverlay: "absolute inset-0"
 }
 
-function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
+function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTracker, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
   const [isRefreshingRank, setIsRefreshingRank] = useState(false)
 
   const canRefresh = hasApiKey && !!account.riot_id && !!account.tagline
@@ -118,6 +119,17 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onSettin
       </div>
 
       <div className={CARD_STYLES.actions}>
+        <button onClick={(e) => {
+          e.stopPropagation()
+          onOpenTracker()
+        }} className={CARD_STYLES.secondaryButton}
+          style={{ padding: '4px' }}
+          title="Open Tracker"
+          disabled={!account.riot_id || !account.tagline}>
+          <img src="/tracker.svg" alt="Tracker" className="w-5 h-5 relative z-10" />
+          <div className={CARD_STYLES.buttonOverlay}></div>
+        </button>
+
         <button onClick={(e) => {
           e.stopPropagation()
           onCopyId()
@@ -198,15 +210,27 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   }
 
   function handleCopyRiotId(account: Account) {
-    navigator.clipboard.writeText(`${account.riot_id}#${account.tagline}`).catch(() => {})
+    const text = `${account.riot_id}#${account.tagline}`
+    navigator.clipboard.writeText(text)
+      .then(() => toast('success', 'Copied Riot ID'))
+      .catch(() => toast('error', 'Failed to copy'))
   }
 
-  function handleCopyId(_accountId: number) {
-    // TODO: Implement copy ID functionality
+  function handleCopyId(username: string | null) {
+    if (!username) return
+    navigator.clipboard.writeText(username)
+      .then(() => toast('success', 'Copied username'))
+      .catch(() => toast('error', 'Failed to copy'))
   }
 
-  function handleCopyPassword(_accountId: number) {
-    // TODO: Implement copy password functionality
+  async function handleCopyPassword(accountId: number) {
+    try {
+      await copyAccountPassword(accountId)
+      toast('success', 'Copied password')
+    } catch (error) {
+      console.error('[handleCopyPassword] accountId:', accountId, 'error:', error)
+      toast('error', 'Failed to copy password')
+    }
   }
 
   function handleSettings(account: Account) {
@@ -216,6 +240,11 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   async function handleEditSubmit(data: UpdateAccount) {
     await updateAccount(data)
     loadAccounts()
+  }
+
+  function handleOpenTracker(account: Account) {
+    if (!account.riot_id || !account.tagline) return
+    openTrackerProfile(account.riot_id, account.tagline).catch(() => {})
   }
 
   async function handleRefreshRank(account: Account) {
@@ -295,8 +324,9 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
             key={account.id}
             account={account}
             onCopyRiotId={() => handleCopyRiotId(account)}
-            onCopyId={() => handleCopyId(account.id)}
+            onCopyId={() => handleCopyId(account.username)}
             onCopyPassword={() => handleCopyPassword(account.id)}
+            onOpenTracker={() => handleOpenTracker(account)}
             onSettings={() => handleSettings(account)}
             onSelect={() => handleSelect(account.id)}
             onRefreshRank={() => handleRefreshRank(account)}

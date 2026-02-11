@@ -1,5 +1,5 @@
 use super::{get_connection, models::{Account, UpdateAccount}};
-use crate::crypto::keyring::{encrypt_password, get_or_create_encryption_key};
+use crate::crypto::dpapi::protect_password;
 use crate::fs::create_dir_with_marker;
 use chrono::Local;
 
@@ -28,8 +28,7 @@ pub fn create_account(data: CreateAccountData) -> Result<Account, String> {
     let conn = get_connection(None)?;
 
     let encrypted_password = if let Some(ref pw) = data.password {
-        let key = get_or_create_encryption_key()?;
-        encrypt_password(pw, &key)?
+        protect_password(pw)?
     } else {
         vec![]
     };
@@ -138,8 +137,7 @@ pub fn update_account(data: UpdateAccount) -> Result<Account, String> {
     let conn = get_connection(None)?;
 
     if let Some(ref pw) = data.password {
-        let key = get_or_create_encryption_key()?;
-        let encrypted = encrypt_password(pw, &key)?;
+        let encrypted = protect_password(pw)?;
         conn.execute(
             "UPDATE accounts SET riot_id=?1, tagline=?2, username=?3, encrypted_password=?4, rank=?5, updated_at=datetime('now') WHERE id=?6",
             (&data.riot_id, &data.tagline, &data.username, &encrypted, &data.rank, data.id),
