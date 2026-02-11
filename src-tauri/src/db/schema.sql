@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS settings (
     riot_client_data_path TEXT,
     account_data_path TEXT,
     henrikdev_api_key TEXT,
+    region TEXT,
     launched INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

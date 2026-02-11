@@ -7,7 +7,6 @@ export function Layout({
   activeItemId,
   onNavigate,
   onAddAccount,
-  hasApiKey,
   riotClientRunning,
   valorantRunning,
   onKillRiotClient,
@@ -24,7 +23,6 @@ export function Layout({
         activeItemId={activeItemId}
         onNavigate={onNavigate}
         onAddAccount={onAddAccount}
-        hasApiKey={hasApiKey}
         riotClientRunning={riotClientRunning}
         valorantRunning={valorantRunning}
         onKillRiotClient={onKillRiotClient}

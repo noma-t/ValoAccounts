@@ -9,7 +9,6 @@ export interface LayoutProps {
   activeItemId?: string
   onNavigate?: (itemId: string) => void
   onAddAccount?: () => void
-  hasApiKey?: boolean
   riotClientRunning?: boolean
   valorantRunning?: boolean
   onKillRiotClient?: () => void

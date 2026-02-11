@@ -49,6 +49,7 @@ pub struct Settings {
     pub riot_client_data_path: Option<String>,
     pub account_data_path: Option<String>,
     pub henrikdev_api_key: Option<String>,
+    pub region: Option<String>,
     pub launched: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -71,4 +72,5 @@ pub struct UpdateSettings {
     pub riot_client_data_path: Option<String>,
     pub account_data_path: Option<String>,
     pub henrikdev_api_key: Option<String>,
+    pub region: Option<String>,
 }
