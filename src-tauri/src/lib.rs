@@ -2,6 +2,7 @@ mod crypto;
 mod db;
 mod fs;
 mod process;
+mod shop;
 
 use db::{
     create_account, get_account, get_all_accounts, get_settings, initialize_database, is_current_data_available,
@@ -240,6 +241,20 @@ fn copy_account_password(account_id: i64) -> Result<(), String> {
     set_clipboard_text(&password)
 }
 
+/// Fetch the daily shop and night market for the given SSID and shard.
+///
+/// `ssid`  - Value of the `ssid` cookie from `auth.riotgames.com`.
+/// `shard` - Region shard, e.g. `"ap"` (Asia-Pacific) or `"na"` (North America).
+///
+/// Note: SSID auto-detection from the active account's data directory will be
+/// implemented in a future iteration.
+#[tauri::command]
+async fn get_shop(ssid: String, shard: String) -> Result<shop::Storefront, String> {
+    shop::fetch_storefront(ssid, shard, None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn switch_account(account_id: Option<i64>) -> Result<(), String> {
     log::info!("Starting account switch: {:?}", account_id);
@@ -300,7 +315,8 @@ pub fn run() {
             kill_riot_client,
             launch_riot_client,
             get_valorant_status,
-            copy_account_password
+            copy_account_password,
+            get_shop
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
