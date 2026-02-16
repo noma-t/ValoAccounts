@@ -1,0 +1,185 @@
+use std::collections::HashMap;
+
+use super::types::{ApiStorefront, DailyOffer, NightMarketOffer, Storefront};
+
+/// UUID identifying Valorant Points (VP) as a currency in Riot's API.
+const VP_CURRENCY_ID: &str = "85ca954a-00f9-6c41-a35e-4b6c24cd4e36";
+
+pub(super) fn extract_access_token(location: &str) -> Option<String> {
+    let prefix = "access_token=";
+    let start = location.find(prefix)?;
+    let after = &location[start + prefix.len()..];
+    let end = after.find('&').unwrap_or(after.len());
+    let token = &after[..end];
+    if token.is_empty() {
+        None
+    } else {
+        Some(token.to_string())
+    }
+}
+
+pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
+    let cost_map: HashMap<String, u64> = raw
+        .skins_panel_layout
+        .single_item_store_offers
+        .unwrap_or_default()
+        .into_iter()
+        .map(|offer| {
+            let vp = offer.cost.get(VP_CURRENCY_ID).copied().unwrap_or(0);
+            (offer.offer_id, vp)
+        })
+        .collect();
+
+    let daily_offers = raw
+        .skins_panel_layout
+        .single_item_offers
+        .into_iter()
+        .map(|uuid| DailyOffer {
+            vp_cost: cost_map.get(&uuid).copied().unwrap_or(0),
+            skin_uuid: uuid,
+        })
+        .collect();
+
+    let night_market = raw.bonus_store.map(|bs| {
+        bs.bonus_store_offers
+            .into_iter()
+            .map(|o| NightMarketOffer {
+                skin_uuid: o.offer.offer_id,
+                base_cost: o.offer.cost.get(VP_CURRENCY_ID).copied().unwrap_or(0),
+                discount_cost: o.discount_costs.get(VP_CURRENCY_ID).copied().unwrap_or(0),
+                discount_percent: o.discount_percent,
+            })
+            .collect()
+    });
+
+    Storefront {
+        daily_offers,
+        daily_remaining_secs: raw.skins_panel_layout.remaining_duration_secs,
+        night_market,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::types::{
+        BonusOffer, BonusStoreData, BonusStoreOffer, SingleItemStoreOffer, SkinsPanelLayout,
+    };
+
+    fn vp_cost_map(cost: u64) -> HashMap<String, u64> {
+        let mut m = HashMap::new();
+        m.insert(VP_CURRENCY_ID.to_string(), cost);
+        m
+    }
+
+    #[test]
+    fn test_extract_token_from_fragment() {
+        let url = "https://playvalorant.com/opt_in#access_token=abc123&token_type=Bearer&expires_in=3600";
+        assert_eq!(extract_access_token(url), Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_extract_token_last_param() {
+        let url = "https://playvalorant.com/opt_in#token_type=Bearer&access_token=xyz789";
+        assert_eq!(extract_access_token(url), Some("xyz789".to_string()));
+    }
+
+    #[test]
+    fn test_extract_token_only_param() {
+        assert_eq!(extract_access_token("https://example.com#access_token=only"), Some("only".to_string()));
+    }
+
+    #[test]
+    fn test_extract_token_missing() {
+        assert_eq!(extract_access_token("https://example.com?something=else"), None);
+    }
+
+    #[test]
+    fn test_extract_token_empty_string() {
+        assert_eq!(extract_access_token(""), None);
+    }
+
+    #[test]
+    fn test_parse_daily_offers_with_costs() {
+        let raw = ApiStorefront {
+            skins_panel_layout: SkinsPanelLayout {
+                single_item_offers: vec!["skin-a".to_string(), "skin-b".to_string()],
+                remaining_duration_secs: 86400,
+                single_item_store_offers: Some(vec![
+                    SingleItemStoreOffer {
+                        offer_id: "skin-a".to_string(),
+                        cost: vp_cost_map(1775),
+                    },
+                    SingleItemStoreOffer {
+                        offer_id: "skin-b".to_string(),
+                        cost: vp_cost_map(2175),
+                    },
+                ]),
+            },
+            bonus_store: None,
+        };
+
+        let sf = parse_storefront(raw);
+        assert_eq!(sf.daily_remaining_secs, 86400);
+        assert_eq!(sf.daily_offers.len(), 2);
+        assert_eq!(sf.daily_offers[0], DailyOffer { skin_uuid: "skin-a".to_string(), vp_cost: 1775 });
+        assert_eq!(sf.daily_offers[1], DailyOffer { skin_uuid: "skin-b".to_string(), vp_cost: 2175 });
+        assert!(sf.night_market.is_none());
+    }
+
+    #[test]
+    fn test_parse_no_store_offers_gives_zero_cost() {
+        let raw = ApiStorefront {
+            skins_panel_layout: SkinsPanelLayout {
+                single_item_offers: vec!["skin-a".to_string()],
+                remaining_duration_secs: 0,
+                single_item_store_offers: None,
+            },
+            bonus_store: None,
+        };
+        assert_eq!(parse_storefront(raw).daily_offers[0].vp_cost, 0);
+    }
+
+    #[test]
+    fn test_parse_with_night_market() {
+        let raw = ApiStorefront {
+            skins_panel_layout: SkinsPanelLayout {
+                single_item_offers: vec![],
+                remaining_duration_secs: 0,
+                single_item_store_offers: None,
+            },
+            bonus_store: Some(BonusStoreData {
+                bonus_store_offers: vec![BonusStoreOffer {
+                    offer: BonusOffer {
+                        offer_id: "nm-skin".to_string(),
+                        cost: vp_cost_map(2175),
+                    },
+                    discount_percent: 40.0,
+                    discount_costs: vp_cost_map(1305),
+                }],
+            }),
+        };
+
+        let nm = parse_storefront(raw).night_market.unwrap();
+        assert_eq!(nm.len(), 1);
+        assert_eq!(nm[0], NightMarketOffer {
+            skin_uuid: "nm-skin".to_string(),
+            base_cost: 2175,
+            discount_cost: 1305,
+            discount_percent: 40.0,
+        });
+    }
+
+    #[test]
+    fn test_parse_no_night_market() {
+        let raw = ApiStorefront {
+            skins_panel_layout: SkinsPanelLayout {
+                single_item_offers: vec![],
+                remaining_duration_secs: 0,
+                single_item_store_offers: None,
+            },
+            bonus_store: None,
+        };
+        assert!(parse_storefront(raw).night_market.is_none());
+    }
+}

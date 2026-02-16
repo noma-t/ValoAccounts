@@ -250,7 +250,7 @@ fn copy_account_password(account_id: i64) -> Result<(), String> {
 /// implemented in a future iteration.
 #[tauri::command]
 async fn get_shop(ssid: String, shard: String) -> Result<shop::Storefront, String> {
-    shop::fetch_storefront(ssid, shard, None)
+    shop::fetch_storefront(ssid, shard)
         .await
         .map_err(|e| e.to_string())
 }
