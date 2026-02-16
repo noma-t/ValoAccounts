@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use super::types::{ApiStorefront, DailyOffer, NightMarketOffer, Storefront};
 
-/// UUID identifying Valorant Points (VP) as a currency in Riot's API.
-const VP_CURRENCY_ID: &str = "85ca954a-00f9-6c41-a35e-4b6c24cd4e36";
+fn first_cost(cost: &HashMap<String, u64>) -> u64 {
+    cost.values().next().copied().unwrap_or(0)
+}
 
 pub(super) fn extract_access_token(location: &str) -> Option<String> {
     let prefix = "access_token=";
@@ -25,7 +26,7 @@ pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
         .unwrap_or_default()
         .into_iter()
         .map(|offer| {
-            let vp = offer.cost.get(VP_CURRENCY_ID).copied().unwrap_or(0);
+            let vp = first_cost(&offer.cost);
             (offer.offer_id, vp)
         })
         .collect();
@@ -45,8 +46,8 @@ pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
             .into_iter()
             .map(|o| NightMarketOffer {
                 skin_uuid: o.offer.offer_id,
-                base_cost: o.offer.cost.get(VP_CURRENCY_ID).copied().unwrap_or(0),
-                discount_cost: o.discount_costs.get(VP_CURRENCY_ID).copied().unwrap_or(0),
+                base_cost: first_cost(&o.offer.cost),
+                discount_cost: first_cost(&o.discount_costs),
                 discount_percent: o.discount_percent,
             })
             .collect()
@@ -68,7 +69,7 @@ mod tests {
 
     fn vp_cost_map(cost: u64) -> HashMap<String, u64> {
         let mut m = HashMap::new();
-        m.insert(VP_CURRENCY_ID.to_string(), cost);
+        m.insert("85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741".to_string(), cost);
         m
     }
 
