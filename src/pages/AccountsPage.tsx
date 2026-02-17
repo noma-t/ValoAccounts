@@ -139,6 +139,7 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTr
         }} className={CARD_STYLES.secondaryButton}
           title="Shop"
           style={{ padding: '5px' }}
+          disabled={selectDisabled}
         >
           <img src="/shop-cart-icon.svg" alt="Shop" className="w-4.5 h-4.5 relative z-10" />
           <div className={CARD_STYLES.buttonOverlay}></div>
