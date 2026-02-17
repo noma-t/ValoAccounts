@@ -4979,6 +4979,7 @@ dependencies = [
  "log",
  "once_cell",
  "rand 0.8.5",
+ "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

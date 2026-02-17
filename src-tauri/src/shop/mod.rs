@@ -19,10 +19,29 @@ use version::fetch_version_info;
 /// * `cookies` - Riot account cookies parsed from RiotGamesPrivateSettings.yaml.
 ///
 /// The shard is derived from `clid` (e.g. "ap1" -> "ap") and the PUUID from `sub`.
-pub async fn fetch_storefront(cookies: RiotCookies) -> Result<Storefront, ShopError> {
+pub async fn fetch_storefront(
+    cookies: RiotCookies,
+) -> Result<(Storefront, RiotCookies), ShopError> {
+    log::debug!("fetch_storefront: starting version info fetch");
     let info = fetch_version_info().await?;
+    log::debug!(
+        "fetch_storefront: version={}, user_agent={}",
+        info.client_version,
+        info.user_agent
+    );
+
     let shop_client = ShopClient::new(cookies, &info.user_agent)?;
-    shop_client.fetch(&info.client_version).await
+    log::debug!("fetch_storefront: ShopClient created, fetching storefront");
+
+    let storefront = shop_client.fetch(&info.client_version).await?;
+    log::debug!(
+        "fetch_storefront: storefront fetched, {} daily offers, night_market={}",
+        storefront.daily_offers.len(),
+        storefront.night_market.is_some()
+    );
+
+    let updated_cookies = shop_client.extract_updated_cookies();
+    Ok((storefront, updated_cookies))
 }
 
 #[cfg(test)]
@@ -117,7 +136,11 @@ mod tests {
         let result = fetch_storefront(cookies).await;
         assert!(result.is_ok(), "Storefront fetch failed: {:?}", result.unwrap_err());
 
-        let sf = result.unwrap();
+        let (sf, updated_cookies) = result.unwrap();
+
+        println!("\n--- Updated Cookies ---");
+        println!("  ssid: {}", if updated_cookies.ssid.is_some() { "present" } else { "missing" });
+        println!("  tdid: {}", if updated_cookies.tdid.is_some() { "present" } else { "missing" });
 
         println!("\n--- Daily Shop ({} sec remaining) ---", sf.daily_remaining_secs);
         for o in &sf.daily_offers {
