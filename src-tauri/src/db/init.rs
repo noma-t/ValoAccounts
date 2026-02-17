@@ -102,6 +102,11 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
         [],
     );
 
+    let _ = conn.execute(
+        "ALTER TABLE storefront_cache ADD COLUMN nm_expires_at INTEGER",
+        [],
+    );
+
     migrate_existing_accounts(conn)?;
 
     Ok(())
