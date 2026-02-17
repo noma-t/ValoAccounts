@@ -3,6 +3,7 @@ mod db;
 mod fs;
 mod process;
 mod shop;
+mod skins;
 
 use db::{
     create_account, get_account, get_all_accounts, get_settings, initialize_database, is_current_data_available,
@@ -241,16 +242,111 @@ fn copy_account_password(account_id: i64) -> Result<(), String> {
     set_clipboard_text(&password)
 }
 
-/// Fetch the daily shop and night market for the given SSID and shard.
-///
-/// `ssid`  - Value of the `ssid` cookie from `auth.riotgames.com`.
-/// `shard` - Region shard, e.g. `"ap"` (Asia-Pacific) or `"na"` (North America).
-///
-/// Note: SSID auto-detection from the active account's data directory will be
-/// implemented in a future iteration.
 #[tauri::command]
-async fn get_shop(ssid: String, shard: String) -> Result<shop::Storefront, String> {
-    shop::fetch_storefront(ssid, shard)
+fn get_account_cookies(account_id: i64) -> Result<Option<shop::RiotCookies>, String> {
+    let account = get_account(account_id)?;
+    let data_folder = account
+        .data_folder
+        .ok_or("Account has no data directory assigned")?;
+
+    let settings = get_settings()?;
+    let account_data_path = match settings.account_data_path {
+        Some(path) => PathBuf::from(path),
+        None => db::init::get_default_account_data_path()?,
+    };
+
+    let yaml_path = account_data_path
+        .join(&data_folder)
+        .join("RiotGamesPrivateSettings.yaml");
+
+    if !yaml_path.exists() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| format!("Failed to read settings file: {}", e))?;
+
+    let doc: serde_yaml::Value = serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+
+    let session_cookies = doc
+        .get("riot-login")
+        .and_then(|v| v.get("persist"))
+        .and_then(|v| v.get("session"))
+        .and_then(|v| v.get("cookies"))
+        .and_then(|v| v.as_sequence());
+
+    let mut cookies = shop::RiotCookies {
+        asid: None,
+        ccid: None,
+        clid: None,
+        sub: None,
+        csid: None,
+        ssid: None,
+        tdid: None,
+    };
+
+    if let Some(cookie_list) = session_cookies {
+        for cookie in cookie_list {
+            let name = cookie.get("name").and_then(|v| v.as_str());
+            let value = cookie.get("value").and_then(|v| v.as_str());
+            if let (Some(n), Some(v)) = (name, value) {
+                match n {
+                    "asid" => cookies.asid = Some(v.to_string()),
+                    "ccid" => cookies.ccid = Some(v.to_string()),
+                    "clid" => cookies.clid = Some(v.to_string()),
+                    "sub" => cookies.sub = Some(v.to_string()),
+                    "csid" => cookies.csid = Some(v.to_string()),
+                    "ssid" => cookies.ssid = Some(v.to_string()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    cookies.tdid = doc
+        .get("rso-authenticator")
+        .and_then(|v| v.get("tdid"))
+        .and_then(|v| v.get("value"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+
+    if cookies.ssid.is_none() {
+        return Ok(None);
+    }
+
+    Ok(Some(cookies))
+}
+
+/// Fetch the daily shop and night market, returning a cached result when valid.
+#[tauri::command]
+async fn get_shop(account_id: i64, cookies: shop::RiotCookies) -> Result<shop::Storefront, String> {
+    if let Some(cached) = shop::load_cached_storefront(account_id) {
+        return Ok(cached);
+    }
+
+    let storefront = shop::fetch_storefront(cookies)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    shop::save_storefront_cache(account_id, &storefront);
+
+    Ok(storefront)
+}
+
+#[tauri::command]
+fn get_skin_info(level_uuid: String) -> Result<Option<skins::SkinWeapon>, String> {
+    skins::get_skin_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_skin_info_batch(level_uuids: Vec<String>) -> Result<Vec<Option<skins::SkinWeapon>>, String> {
+    skins::get_skins_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn sync_skins() -> Result<bool, String> {
+    skins::sync_skins_database()
         .await
         .map_err(|e| e.to_string())
 }
@@ -288,9 +384,22 @@ pub fn run() {
         std::process::exit(1);
     }
 
+    if let Err(e) = skins::initialize_skins_db(None) {
+        log::error!("Failed to initialize skins database: {}", e);
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             process::start_process_monitor(app.handle().clone());
+
+            tauri::async_runtime::spawn(async {
+                match skins::sync_skins_database().await {
+                    Ok(true) => log::info!("Skins database synced successfully"),
+                    Ok(false) => log::info!("Skins database already up to date"),
+                    Err(e) => log::warn!("Failed to sync skins database: {}", e),
+                }
+            });
+
             let window = app.get_webview_window("main")
                 .ok_or("main window not found")?;
             window.show().map_err(|e| e.to_string())?;
@@ -316,7 +425,11 @@ pub fn run() {
             launch_riot_client,
             get_valorant_status,
             copy_account_password,
-            get_shop
+            get_account_cookies,
+            get_shop,
+            get_skin_info,
+            get_skin_info_batch,
+            sync_skins
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

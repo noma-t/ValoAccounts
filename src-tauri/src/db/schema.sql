@@ -49,6 +49,17 @@ BEGIN
     UPDATE settings SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
 END;
 
+-- Storefront cache (per-account, expires based on daily shop timer)
+CREATE TABLE IF NOT EXISTS storefront_cache (
+    account_id INTEGER PRIMARY KEY,
+    daily_offers_json TEXT NOT NULL,
+    night_market_json TEXT,
+    expires_at INTEGER NOT NULL,
+    nm_expires_at INTEGER,
+    cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
 -- Initial settings record
 INSERT OR IGNORE INTO settings (id)
 VALUES (1);

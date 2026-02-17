@@ -2,6 +2,19 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+// -- Riot account cookies -----------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiotCookies {
+    pub asid: Option<String>,
+    pub ccid: Option<String>,
+    pub clid: Option<String>,
+    pub sub: Option<String>,
+    pub csid: Option<String>,
+    pub ssid: Option<String>,
+    pub tdid: Option<String>,
+}
+
 // -- Public output types ------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,6 +36,7 @@ pub struct Storefront {
     pub daily_offers: Vec<DailyOffer>,
     pub daily_remaining_secs: u64,
     pub night_market: Option<Vec<NightMarketOffer>>,
+    pub night_market_remaining_secs: Option<u64>,
 }
 
 // -- Internal API response types ----------------------------------------------
@@ -58,6 +72,8 @@ pub(super) struct SingleItemStoreOffer {
 pub(super) struct BonusStoreData {
     #[serde(rename = "BonusStoreOffers")]
     pub(super) bonus_store_offers: Vec<BonusStoreOffer>,
+    #[serde(rename = "BonusStoreRemainingDurationInSeconds")]
+    pub(super) remaining_duration_secs: Option<u64>,
 }
 
 #[derive(Deserialize)]

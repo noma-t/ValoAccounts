@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile } from '../lib/tauri'
+import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile, getAccountCookies } from '../lib/tauri'
+import type { RiotCookies } from '../lib/tauri'
 import { RANK_ICON_MAP } from '../types/account'
 import type { Account, UpdateAccount, ValorantRank } from '../types/account'
 import { EditAccountModal } from '../components/EditAccountModal'
+import { ShopModal } from '../components/ShopModal'
 import { useToast } from '../components/Toast'
 
 const TIER_ID_TO_RANK: Record<number, string | null> = {
@@ -31,6 +33,7 @@ interface AccountCardProps {
   onCopyId: () => void
   onCopyPassword: () => void
   onOpenTracker: () => void
+  onShop: () => void
   onSettings: () => void
   onSelect: () => void
   onRefreshRank: () => Promise<void>
@@ -61,7 +64,7 @@ const CARD_STYLES = {
   buttonOverlay: "absolute inset-0"
 }
 
-function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTracker, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
+function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTracker, onShop, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
   const [isRefreshingRank, setIsRefreshingRank] = useState(false)
 
   const canRefresh = hasApiKey && !!account.riot_id && !!account.tagline
@@ -132,6 +135,17 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTr
 
         <button onClick={(e) => {
           e.stopPropagation()
+          onShop()
+        }} className={CARD_STYLES.secondaryButton}
+          title="Shop"
+          style={{ padding: '5px' }}
+        >
+          <img src="/shop-cart-icon.svg" alt="Shop" className="w-4.5 h-4.5 relative z-10" />
+          <div className={CARD_STYLES.buttonOverlay}></div>
+        </button>
+
+        <button onClick={(e) => {
+          e.stopPropagation()
           onCopyId()
         }} className={CARD_STYLES.secondaryButton}
           title="Copy Username"
@@ -190,6 +204,8 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [shopAccount, setShopAccount] = useState<Account | null>(null)
+  const [shopCookies, setShopCookies] = useState<RiotCookies | null>(null)
   const [isSwitching, setIsSwitching] = useState(false)
 
   const selectDisabled = riotClientRunning || valorantRunning || isSwitching
@@ -245,6 +261,16 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   function handleOpenTracker(account: Account) {
     if (!account.riot_id || !account.tagline) return
     openTrackerProfile(account.riot_id, account.tagline).catch(() => {})
+  }
+
+  async function handleOpenShop(account: Account) {
+    try {
+      const cookies = await getAccountCookies(account.id)
+      setShopCookies(cookies)
+    } catch {
+      setShopCookies(null)
+    }
+    setShopAccount(account)
   }
 
   async function handleRefreshRank(account: Account) {
@@ -327,6 +353,7 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
             onCopyId={() => handleCopyId(account.username)}
             onCopyPassword={() => handleCopyPassword(account.id)}
             onOpenTracker={() => handleOpenTracker(account)}
+            onShop={() => handleOpenShop(account)}
             onSettings={() => handleSettings(account)}
             onSelect={() => handleSelect(account.id)}
             onRefreshRank={() => handleRefreshRank(account)}
@@ -340,6 +367,11 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
         account={editingAccount}
         onClose={() => setEditingAccount(null)}
         onSubmit={handleEditSubmit}
+      />
+      <ShopModal
+        account={shopAccount}
+        cookies={shopCookies}
+        onClose={() => setShopAccount(null)}
       />
     </div>
   )

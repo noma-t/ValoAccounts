@@ -5,7 +5,7 @@ use reqwest::Client;
 
 use super::error::ShopError;
 use super::storefront::{extract_access_token, parse_storefront};
-use super::types::{ApiStorefront, EntitlementsResponse, Storefront, UserInfoResponse};
+use super::types::{ApiStorefront, EntitlementsResponse, RiotCookies, Storefront, UserInfoResponse};
 
 const AUTH_COOKIES_URL: &str = "https://auth.riotgames.com/api/v1/authorization";
 const AUTH_REAUTH_URL: &str = "https://auth.riotgames.com/authorize";
@@ -13,7 +13,8 @@ const ENTITLEMENTS_URL: &str = "https://entitlements.auth.riotgames.com/api/toke
 const USERINFO_URL: &str = "https://auth.riotgames.com/userinfo";
 
 const CLIENT_PLATFORM: &str = "ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9";
-const RIOT_AUTH_DOMAIN: &str = "https://auth.riotgames.com";
+const RIOT_AUTH_URL: &str = "https://auth.riotgames.com";
+const RIOT_GAMES_URL: &str = "https://riotgames.com";
 
 const AUTH_PARAMS: &[(&str, &str)] = &[
     ("client_id", "play-valorant-web-prod"),
@@ -23,31 +24,71 @@ const AUTH_PARAMS: &[(&str, &str)] = &[
     ("scope", "account openid"),
 ];
 
+/// Derive the shard from the `clid` cookie value by stripping trailing digits.
+///
+/// Examples: "ap1" -> "ap", "na1" -> "na", "eu3" -> "eu", "kr" -> "kr"
+pub(super) fn shard_from_clid(clid: &str) -> &str {
+    clid.trim_end_matches(|c: char| c.is_ascii_digit())
+}
+
 pub(super) struct ShopClient {
-    ssid: String,
     shard: String,
+    puuid: Option<String>,
     client: Client,
-    jar: Arc<Jar>,
 }
 
 impl ShopClient {
     pub(super) fn new(
-        ssid: impl Into<String>,
-        shard: impl Into<String>,
+        cookies: RiotCookies,
         user_agent: &str,
     ) -> Result<Self, ShopError> {
+        let shard = cookies
+            .clid
+            .as_deref()
+            .map(shard_from_clid)
+            .unwrap_or("ap")
+            .to_string();
+
+        let puuid = cookies.sub.clone();
+
         let jar = Arc::new(Jar::default());
+
+        let auth_url: reqwest::Url = RIOT_AUTH_URL
+            .parse()
+            .map_err(|e| ShopError::ParseError(format!("Invalid URL constant: {}", e)))?;
+        let riot_url: reqwest::Url = RIOT_GAMES_URL
+            .parse()
+            .map_err(|e| ShopError::ParseError(format!("Invalid URL constant: {}", e)))?;
+
+        let auth_cookies: &[(&str, &Option<String>)] = &[
+            ("ssid", &cookies.ssid),
+            ("asid", &cookies.asid),
+            ("csid", &cookies.csid),
+            ("ccid", &cookies.ccid),
+            ("clid", &cookies.clid),
+            ("sub", &cookies.sub),
+        ];
+
+        for &(name, value) in auth_cookies {
+            if let Some(v) = value {
+                jar.add_cookie_str(&format!("{}={}", name, v), &auth_url);
+            }
+        }
+
+        if let Some(ref v) = cookies.tdid {
+            jar.add_cookie_str(&format!("tdid={}", v), &riot_url);
+        }
+
         let client = Client::builder()
-            .cookie_provider(jar.clone())
+            .cookie_provider(jar)
             .redirect(reqwest::redirect::Policy::none())
             .user_agent(user_agent)
             .build()?;
 
         Ok(Self {
-            ssid: ssid.into(),
-            shard: shard.into(),
+            shard,
+            puuid,
             client,
-            jar,
         })
     }
 
@@ -66,12 +107,6 @@ impl ShopClient {
             .json(&auth_body)
             .send()
             .await?;
-
-        let riot_url: reqwest::Url = RIOT_AUTH_DOMAIN
-            .parse()
-            .map_err(|e| ShopError::ParseError(format!("Invalid URL constant: {}", e)))?;
-        self.jar
-            .add_cookie_str(&format!("ssid={}", self.ssid), &riot_url);
 
         let resp = self
             .client
@@ -185,7 +220,12 @@ impl ShopClient {
     pub(super) async fn fetch(&self, client_version: &str) -> Result<Storefront, ShopError> {
         let access_token = self.authenticate().await?;
         let entitlements_token = self.get_entitlements_token(&access_token).await?;
-        let puuid = self.get_puuid(&access_token).await?;
+
+        let puuid = match &self.puuid {
+            Some(p) => p.clone(),
+            None => self.get_puuid(&access_token).await?,
+        };
+
         let raw = self
             .get_storefront_raw(&access_token, &entitlements_token, &puuid, client_version)
             .await?;

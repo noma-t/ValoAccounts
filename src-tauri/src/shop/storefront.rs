@@ -41,6 +41,11 @@ pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
         })
         .collect();
 
+    let night_market_remaining_secs = raw
+        .bonus_store
+        .as_ref()
+        .and_then(|bs| bs.remaining_duration_secs);
+
     let night_market = raw.bonus_store.map(|bs| {
         bs.bonus_store_offers
             .into_iter()
@@ -57,6 +62,7 @@ pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
         daily_offers,
         daily_remaining_secs: raw.skins_panel_layout.remaining_duration_secs,
         night_market,
+        night_market_remaining_secs,
     }
 }
 
@@ -64,8 +70,16 @@ pub(super) fn parse_storefront(raw: ApiStorefront) -> Storefront {
 mod tests {
     use super::*;
     use super::super::types::{
-        BonusOffer, BonusStoreData, BonusStoreOffer, SingleItemStoreOffer, SkinsPanelLayout,
+        BonusOffer, BonusStoreData, BonusStoreOffer, SingleItemStoreOffer,
+        SkinsPanelLayout,
     };
+
+    fn make_bonus_store(offers: Vec<BonusStoreOffer>) -> BonusStoreData {
+        BonusStoreData {
+            bonus_store_offers: offers,
+            remaining_duration_secs: Some(604800),
+        }
+    }
 
     fn vp_cost_map(cost: u64) -> HashMap<String, u64> {
         let mut m = HashMap::new();
@@ -149,16 +163,14 @@ mod tests {
                 remaining_duration_secs: 0,
                 single_item_store_offers: None,
             },
-            bonus_store: Some(BonusStoreData {
-                bonus_store_offers: vec![BonusStoreOffer {
-                    offer: BonusOffer {
-                        offer_id: "nm-skin".to_string(),
-                        cost: vp_cost_map(2175),
-                    },
-                    discount_percent: 40.0,
-                    discount_costs: vp_cost_map(1305),
-                }],
-            }),
+            bonus_store: Some(make_bonus_store(vec![BonusStoreOffer {
+                offer: BonusOffer {
+                    offer_id: "nm-skin".to_string(),
+                    cost: vp_cost_map(2175),
+                },
+                discount_percent: 40.0,
+                discount_costs: vp_cost_map(1305),
+            }])),
         };
 
         let nm = parse_storefront(raw).night_market.unwrap();
