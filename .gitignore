@@ -39,3 +39,4 @@ src-tauri/[0-9]*/
 
 # Claude local settings
 .claude/settings.local.json
+/shopresult.example.json
