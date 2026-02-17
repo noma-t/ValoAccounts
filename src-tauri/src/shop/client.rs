@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use reqwest::cookie::Jar;
+use reqwest::cookie::{CookieStore, Jar};
 use reqwest::Client;
 
 use super::error::ShopError;
@@ -35,6 +35,7 @@ pub(super) struct ShopClient {
     shard: String,
     puuid: Option<String>,
     client: Client,
+    jar: Arc<Jar>,
 }
 
 impl ShopClient {
@@ -79,6 +80,10 @@ impl ShopClient {
             jar.add_cookie_str(&format!("tdid={}", v), &riot_url);
         }
 
+        // Clone the Arc before passing to cookie_provider, which consumes it.
+        // This lets us read cookies back from the jar after authentication.
+        let jar_ref = Arc::clone(&jar);
+
         let client = Client::builder()
             .cookie_provider(jar)
             .redirect(reqwest::redirect::Policy::none())
@@ -89,6 +94,7 @@ impl ShopClient {
             shard,
             puuid,
             client,
+            jar: jar_ref,
         })
     }
 
@@ -230,5 +236,79 @@ impl ShopClient {
             .get_storefront_raw(&access_token, &entitlements_token, &puuid, client_version)
             .await?;
         Ok(parse_storefront(raw))
+    }
+
+    /// Extract the current cookie values from the jar after authentication.
+    ///
+    /// The auth flow may have updated cookies via Set-Cookie headers; this
+    /// reads them back so the caller can persist them.
+    pub(super) fn extract_updated_cookies(&self) -> RiotCookies {
+        log::debug!("Extracting updated cookies from jar");
+        let auth_url: reqwest::Url = RIOT_AUTH_URL.parse().expect("constant URL is valid");
+        let riot_url: reqwest::Url = RIOT_GAMES_URL.parse().expect("constant URL is valid");
+
+        let mut cookies = RiotCookies {
+            asid: None,
+            ccid: None,
+            clid: None,
+            sub: None,
+            csid: None,
+            ssid: None,
+            tdid: None,
+        };
+
+        if let Some(header) = self.jar.cookies(&auth_url) {
+            let header_str = header.to_str().unwrap_or("");
+            log::debug!("Auth cookie header has {} chars", header_str.len());
+            for pair in header_str.split("; ") {
+                if let Some((name, value)) = pair.split_once('=') {
+                    let matched = match name {
+                        "ssid" => { cookies.ssid = Some(value.to_string()); true }
+                        "asid" => { cookies.asid = Some(value.to_string()); true }
+                        "csid" => { cookies.csid = Some(value.to_string()); true }
+                        "ccid" => { cookies.ccid = Some(value.to_string()); true }
+                        "clid" => { cookies.clid = Some(value.to_string()); true }
+                        "sub" => { cookies.sub = Some(value.to_string()); true }
+                        _ => false,
+                    };
+                    if matched {
+                        log::debug!("Extracted cookie: {} ({} chars)", name, value.len());
+                    }
+                }
+            }
+        } else {
+            log::debug!("No cookies found in jar for auth URL");
+        }
+
+        if let Some(header) = self.jar.cookies(&riot_url) {
+            let header_str = header.to_str().unwrap_or("");
+            log::debug!("Riot cookie header has {} chars", header_str.len());
+            for pair in header_str.split("; ") {
+                if let Some((name, value)) = pair.split_once('=') {
+                    if name == "tdid" {
+                        cookies.tdid = Some(value.to_string());
+                        log::debug!("Extracted cookie: tdid ({} chars)", value.len());
+                    }
+                }
+            }
+        } else {
+            log::debug!("No cookies found in jar for riot URL");
+        }
+
+        let present: Vec<&str> = [
+            cookies.ssid.as_ref().map(|_| "ssid"),
+            cookies.asid.as_ref().map(|_| "asid"),
+            cookies.csid.as_ref().map(|_| "csid"),
+            cookies.ccid.as_ref().map(|_| "ccid"),
+            cookies.clid.as_ref().map(|_| "clid"),
+            cookies.sub.as_ref().map(|_| "sub"),
+            cookies.tdid.as_ref().map(|_| "tdid"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        log::debug!("Extracted cookies summary: [{}]", present.join(", "));
+
+        cookies
     }
 }
