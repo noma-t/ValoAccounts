@@ -2,6 +2,8 @@ mod crypto;
 mod db;
 mod fs;
 mod process;
+mod shop;
+mod skins;
 
 use db::{
     create_account, get_account, get_all_accounts, get_settings, initialize_database, is_current_data_available,
@@ -241,6 +243,288 @@ fn copy_account_password(account_id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn get_account_cookies(account_id: i64) -> Result<Option<shop::RiotCookies>, String> {
+    let yaml_path = match resolve_account_yaml_path(account_id)? {
+        Some(path) => path,
+        None => return Ok(None),
+    };
+
+    let content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| format!("Failed to read settings file: {}", e))?;
+
+    let doc: serde_yaml::Value = serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+
+    let session_cookies = doc
+        .get("riot-login")
+        .and_then(|v| v.get("persist"))
+        .and_then(|v| v.get("session"))
+        .and_then(|v| v.get("cookies"))
+        .and_then(|v| v.as_sequence());
+
+    let mut cookies = shop::RiotCookies {
+        asid: None,
+        ccid: None,
+        clid: None,
+        sub: None,
+        csid: None,
+        ssid: None,
+        tdid: None,
+    };
+
+    if let Some(cookie_list) = session_cookies {
+        for cookie in cookie_list {
+            let name = cookie.get("name").and_then(|v| v.as_str());
+            let value = cookie.get("value").and_then(|v| v.as_str());
+            if let (Some(n), Some(v)) = (name, value) {
+                match n {
+                    "asid" => cookies.asid = Some(v.to_string()),
+                    "ccid" => cookies.ccid = Some(v.to_string()),
+                    "clid" => cookies.clid = Some(v.to_string()),
+                    "sub" => cookies.sub = Some(v.to_string()),
+                    "csid" => cookies.csid = Some(v.to_string()),
+                    "ssid" => cookies.ssid = Some(v.to_string()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    cookies.tdid = doc
+        .get("rso-authenticator")
+        .and_then(|v| v.get("tdid"))
+        .and_then(|v| v.get("value"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+
+    if cookies.ssid.is_none() {
+        return Ok(None);
+    }
+
+    Ok(Some(cookies))
+}
+
+/// Resolve the path to an account's RiotGamesPrivateSettings.yaml.
+fn resolve_account_yaml_path(account_id: i64) -> Result<Option<PathBuf>, String> {
+    let account = get_account(account_id)?;
+    let data_folder = account
+        .data_folder
+        .ok_or("Account has no data directory assigned")?;
+
+    let settings = get_settings()?;
+    let account_data_path = match settings.account_data_path {
+        Some(path) => PathBuf::from(path),
+        None => db::init::get_default_account_data_path()?,
+    };
+
+    let yaml_path = account_data_path
+        .join(&data_folder)
+        .join("RiotGamesPrivateSettings.yaml");
+
+    if yaml_path.exists() {
+        Ok(Some(yaml_path))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Update cookie values in the YAML content string without altering formatting.
+///
+/// For session cookies under `riot-login.persist.session.cookies`, this finds
+/// each `- name: <cookie_name>` block and replaces the `value:` line.
+/// For `tdid`, it finds `rso-authenticator` > `tdid` > `value:` and replaces it.
+fn update_yaml_cookie_values(content: &str, cookies: &shop::RiotCookies) -> String {
+    log::debug!("update_yaml_cookie_values: starting YAML cookie replacement");
+    let cookie_updates: &[(&str, &Option<String>)] = &[
+        ("ssid", &cookies.ssid),
+        ("asid", &cookies.asid),
+        ("csid", &cookies.csid),
+        ("ccid", &cookies.ccid),
+        ("clid", &cookies.clid),
+        ("sub", &cookies.sub),
+    ];
+
+    let mut result = content.to_string();
+
+    for &(cookie_name, cookie_value) in cookie_updates {
+        if let Some(new_val) = cookie_value {
+            // Actual YAML structure:
+            //     -   domain: "auth.riotgames.com"
+            //         hostOnly: true
+            //         ...
+            //         name: "ssid"
+            //         ...
+            //         value: "old_value"
+            // Match `name: "cookie_name"`, skip intermediate fields, then
+            // capture up to and including `value: ` and replace the quoted value.
+            let pattern = format!(
+                r#"(?m)(name:\s*"?{}"?\s*\n(?:\s+\w+:.*\n)*?\s+value:\s*)"[^"]*""#,
+                regex::escape(cookie_name)
+            );
+            if let Ok(re) = regex::Regex::new(&pattern) {
+                let had_match = re.is_match(&result);
+                let replacement = new_val.clone();
+                result = re
+                    .replace(&result, |caps: &regex::Captures| {
+                        format!("{}\"{}\"", &caps[1], replacement)
+                    })
+                    .to_string();
+                if had_match {
+                    log::debug!(
+                        "update_yaml_cookie_values: replaced {} ({} chars)",
+                        cookie_name,
+                        new_val.len()
+                    );
+                } else {
+                    log::debug!(
+                        "update_yaml_cookie_values: no match for {} in YAML",
+                        cookie_name
+                    );
+                }
+            }
+        } else {
+            log::debug!(
+                "update_yaml_cookie_values: skipping {} (no updated value)",
+                cookie_name
+            );
+        }
+    }
+
+    if let Some(new_tdid) = &cookies.tdid {
+        // Actual YAML structure:
+        //   rso-authenticator:
+        //       tdid:
+        //           domain: "riotgames.com"
+        //           ...
+        //           value: "old_value"
+        let pattern =
+            r#"(?m)(rso-authenticator:\s*\n\s+tdid:\s*\n(?:\s+\w+:.*\n)*?\s+value:\s*)"[^"]*""#;
+        if let Ok(re) = regex::Regex::new(pattern) {
+            let had_match = re.is_match(&result);
+            let replacement = new_tdid.clone();
+            result = re
+                .replace(&result, |caps: &regex::Captures| {
+                    format!("{}\"{}\"", &caps[1], replacement)
+                })
+                .to_string();
+            if had_match {
+                log::debug!(
+                    "update_yaml_cookie_values: replaced tdid ({} chars)",
+                    new_tdid.len()
+                );
+            } else {
+                log::debug!("update_yaml_cookie_values: no match for tdid in YAML");
+            }
+        }
+    } else {
+        log::debug!("update_yaml_cookie_values: skipping tdid (no updated value)");
+    }
+
+    let changed = content != result;
+    log::debug!(
+        "update_yaml_cookie_values: done, content_changed={}",
+        changed
+    );
+
+    result
+}
+
+fn save_account_cookies(account_id: i64, cookies: &shop::RiotCookies) -> Result<(), String> {
+    log::debug!("save_account_cookies: starting for account {}", account_id);
+
+    let yaml_path = match resolve_account_yaml_path(account_id)? {
+        Some(path) => {
+            log::debug!("save_account_cookies: resolved YAML path: {}", path.display());
+            path
+        }
+        None => {
+            log::info!(
+                "Skipping cookie save for account {}: YAML file does not exist",
+                account_id
+            );
+            return Ok(());
+        }
+    };
+
+    let content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| format!("Failed to read settings file: {}", e))?;
+    log::debug!(
+        "save_account_cookies: read YAML file ({} bytes)",
+        content.len()
+    );
+
+    let updated_content = update_yaml_cookie_values(&content, cookies);
+
+    if content == updated_content {
+        log::debug!("save_account_cookies: no changes detected, skipping write");
+        return Ok(());
+    }
+
+    // Atomic write: write to a temp file, then rename over the original
+    let tmp_path = yaml_path.with_extension("yaml.tmp");
+    log::debug!(
+        "save_account_cookies: writing {} bytes to temp file: {}",
+        updated_content.len(),
+        tmp_path.display()
+    );
+    std::fs::write(&tmp_path, &updated_content)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    log::debug!("save_account_cookies: renaming temp file to YAML path");
+    std::fs::rename(&tmp_path, &yaml_path)
+        .map_err(|e| format!("Failed to rename temp file: {}", e))?;
+
+    log::info!(
+        "save_account_cookies: successfully saved updated cookies for account {}",
+        account_id
+    );
+    Ok(())
+}
+
+/// Fetch the daily shop and night market, returning a cached result when valid.
+#[tauri::command]
+async fn get_shop(account_id: i64, cookies: shop::RiotCookies) -> Result<shop::Storefront, String> {
+    log::debug!("get_shop: called for account {}", account_id);
+
+    if let Some(cached) = shop::load_cached_storefront(account_id) {
+        log::debug!("get_shop: returning cached storefront for account {}", account_id);
+        return Ok(cached);
+    }
+
+    log::debug!("get_shop: no cache, fetching storefront for account {}", account_id);
+    let (storefront, updated_cookies) = shop::fetch_storefront(cookies)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::debug!("get_shop: storefront fetched, saving cache");
+    shop::save_storefront_cache(account_id, &storefront);
+
+    log::debug!("get_shop: persisting updated cookies to YAML");
+    if let Err(e) = save_account_cookies(account_id, &updated_cookies) {
+        log::warn!("Failed to save updated cookies for account {}: {}", account_id, e);
+    }
+
+    Ok(storefront)
+}
+
+#[tauri::command]
+fn get_skin_info(level_uuid: String) -> Result<Option<skins::SkinWeapon>, String> {
+    skins::get_skin_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_skin_info_batch(level_uuids: Vec<String>) -> Result<Vec<Option<skins::SkinWeapon>>, String> {
+    skins::get_skins_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn sync_skins() -> Result<bool, String> {
+    skins::sync_skins_database()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn switch_account(account_id: Option<i64>) -> Result<(), String> {
     log::info!("Starting account switch: {:?}", account_id);
 
@@ -273,9 +557,22 @@ pub fn run() {
         std::process::exit(1);
     }
 
+    if let Err(e) = skins::initialize_skins_db(None) {
+        log::error!("Failed to initialize skins database: {}", e);
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             process::start_process_monitor(app.handle().clone());
+
+            tauri::async_runtime::spawn(async {
+                match skins::sync_skins_database().await {
+                    Ok(true) => log::info!("Skins database synced successfully"),
+                    Ok(false) => log::info!("Skins database already up to date"),
+                    Err(e) => log::warn!("Failed to sync skins database: {}", e),
+                }
+            });
+
             let window = app.get_webview_window("main")
                 .ok_or("main window not found")?;
             window.show().map_err(|e| e.to_string())?;
@@ -300,7 +597,12 @@ pub fn run() {
             kill_riot_client,
             launch_riot_client,
             get_valorant_status,
-            copy_account_password
+            copy_account_password,
+            get_account_cookies,
+            get_shop,
+            get_skin_info,
+            get_skin_info_batch,
+            sync_skins
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

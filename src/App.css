@@ -14,3 +14,27 @@
     display: none;
   }
 }
+
+@layer components {
+  .shop-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #525252 transparent;
+  }
+
+  .shop-scrollbar::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .shop-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .shop-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #525252;
+    border-radius: 2px;
+  }
+
+  .shop-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #737373;
+  }
+}

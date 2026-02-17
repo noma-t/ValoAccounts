@@ -67,6 +67,65 @@ export async function copyAccountPassword(accountId: number): Promise<void> {
   return invoke('copy_account_password', { accountId })
 }
 
+export interface RiotCookies {
+  asid: string | null
+  ccid: string | null
+  clid: string | null
+  sub: string | null
+  csid: string | null
+  ssid: string | null
+  tdid: string | null
+}
+
+export async function getAccountCookies(accountId: number): Promise<RiotCookies | null> {
+  return invoke('get_account_cookies', { accountId })
+}
+
+export interface DailyOffer {
+  skin_uuid: string
+  vp_cost: number
+}
+
+export interface NightMarketOffer {
+  skin_uuid: string
+  base_cost: number
+  discount_cost: number
+  discount_percent: number
+}
+
+export interface Storefront {
+  daily_offers: DailyOffer[]
+  daily_remaining_secs: number
+  night_market: NightMarketOffer[] | null
+  night_market_remaining_secs: number | null
+}
+
+export async function getShop(accountId: number, cookies: RiotCookies): Promise<Storefront> {
+  return invoke('get_shop', { accountId, cookies })
+}
+
+export interface SkinWeapon {
+  uuid: string
+  display_name: string
+  display_icon: string | null
+  tier_uuid: string | null
+  tier_color: string | null
+  tier_rank: number | null
+  tier_icon: string | null
+}
+
+export async function getSkinInfo(levelUuid: string): Promise<SkinWeapon | null> {
+  return invoke('get_skin_info', { levelUuid })
+}
+
+export async function getSkinInfoBatch(levelUuids: string[]): Promise<(SkinWeapon | null)[]> {
+  return invoke('get_skin_info_batch', { levelUuids })
+}
+
+export async function syncSkins(): Promise<boolean> {
+  return invoke('sync_skins')
+}
+
 export async function openTrackerProfile(riotId: string, tagline: string): Promise<void> {
   const url = `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(`${riotId}#${tagline}`)}`
   return openUrl(url)
