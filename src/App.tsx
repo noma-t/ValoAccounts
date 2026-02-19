@@ -27,8 +27,14 @@ function App() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        const settings = await getSettings()
+        const [settings, riotStatus, valorantStatus] = await Promise.all([
+          getSettings(),
+          getRiotClientStatus().catch(() => false),
+          getValorantStatus().catch(() => false),
+        ])
         setHasApiKey(!!settings.henrikdev_api_key)
+        setRiotClientRunning(riotStatus)
+        setValorantRunning(valorantStatus)
         if (!settings.launched) {
           await markLaunched()
           setActivePage('settings')
@@ -53,9 +59,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    void getRiotClientStatus().then(setRiotClientRunning).catch(() => setRiotClientRunning(false))
-    void getValorantStatus().then(setValorantRunning).catch(() => setValorantRunning(false))
-
     const unlisten = listen<boolean>('riot-client-status', (event) => {
       setRiotClientRunning(event.payload)
     })
