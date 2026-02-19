@@ -39,6 +39,7 @@ interface AccountCardProps {
   onRefreshRank: () => Promise<void>
   isSelected: boolean
   selectDisabled: boolean
+  shopDisabled: boolean
   hasApiKey: boolean
 }
 
@@ -64,7 +65,7 @@ const CARD_STYLES = {
   buttonOverlay: "absolute inset-0"
 }
 
-function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTracker, onShop, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, hasApiKey }: AccountCardProps) {
+function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTracker, onShop, onSettings, onSelect, onRefreshRank, isSelected, selectDisabled, shopDisabled, hasApiKey }: AccountCardProps) {
   const [isRefreshingRank, setIsRefreshingRank] = useState(false)
 
   const canRefresh = hasApiKey && !!account.riot_id && !!account.tagline
@@ -139,7 +140,7 @@ function AccountCard({ account, onCopyRiotId, onCopyId, onCopyPassword, onOpenTr
         }} className={CARD_STYLES.secondaryButton}
           title="Shop"
           style={{ padding: '5px' }}
-          disabled={selectDisabled}
+          disabled={shopDisabled}
         >
           <img src="/shop-cart-icon.svg" alt="Shop" className="w-4.5 h-4.5 relative z-10" />
           <div className={CARD_STYLES.buttonOverlay}></div>
@@ -360,6 +361,7 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
             onRefreshRank={() => handleRefreshRank(account)}
             isSelected={selectedAccountId === account.id}
             selectDisabled={selectDisabled}
+            shopDisabled={(riotClientRunning || valorantRunning) && selectedAccountId === account.id}
             hasApiKey={hasApiKey}
           />
         ))}
