@@ -1,7 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { getAccountCookies, getShop, getSkinInfoBatch, isDemoMode } from '../lib/tauri'
-import type { Storefront, SkinWeapon, DailyOffer, NightMarketOffer, Bundle } from '../lib/tauri'
+import {
+  getAccountCookies,
+  getShop,
+  getSkinInfoBatch,
+  getBuddyInfoBatch,
+  getPlayercardInfoBatch,
+  getSprayInfoBatch,
+  getFlexInfoBatch,
+  isDemoMode,
+  ITEM_TYPE_SKIN,
+  ITEM_TYPE_BUDDY,
+  ITEM_TYPE_PLAYERCARD,
+  ITEM_TYPE_SPRAY,
+} from '../lib/tauri'
+import type {
+  Storefront,
+  SkinWeapon,
+  BuddyItem,
+  PlayercardItem,
+  SprayItem,
+  FlexItem,
+  DailyOffer,
+  NightMarketOffer,
+  Bundle,
+} from '../lib/tauri'
 import '../App.css'
 
 function formatCountdown(totalSecs: number): string {
@@ -64,6 +87,14 @@ function VpIcon() {
   return <img src="/valo-icon.svg" alt="" width={12} height={12} className="opacity-70 block shrink-0" />
 }
 
+// Union type for any bundle item info resolved from the DB
+type ItemInfo =
+  | { kind: 'skin'; data: SkinWeapon }
+  | { kind: 'buddy'; data: BuddyItem }
+  | { kind: 'playercard'; data: PlayercardItem }
+  | { kind: 'spray'; data: SprayItem }
+  | { kind: 'flex'; data: FlexItem }
+
 function skinImageUrl(skin: SkinWeapon | null, levelUuid: string): string {
   if (skin?.display_icon) return skin.display_icon
   return `https://media.valorant-api.com/weaponskinlevels/${levelUuid}/displayicon.png`
@@ -109,11 +140,14 @@ const MOCK_STOREFRONT: Storefront = {
       total_discount_percent: 40.7,
       bundle_remaining_secs: 3600 * 72,
       items: [
-        { skin_uuid: 'mock-sp-1', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
-        { skin_uuid: 'mock-sp-2', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
-        { skin_uuid: 'mock-sp-3', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
-        { skin_uuid: 'mock-sp-4', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
-        { skin_uuid: 'mock-sp-5', base_cost: 4350, discounted_cost: 2523, discount_percent: 42 },
+        { item_uuid: 'mock-sp-1', item_type_id: ITEM_TYPE_SKIN, base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { item_uuid: 'mock-sp-2', item_type_id: ITEM_TYPE_SKIN, base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { item_uuid: 'mock-sp-3', item_type_id: ITEM_TYPE_SKIN, base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { item_uuid: 'mock-sp-4', item_type_id: ITEM_TYPE_SKIN, base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { item_uuid: 'mock-sp-5', item_type_id: ITEM_TYPE_SKIN, base_cost: 4350, discounted_cost: 2523, discount_percent: 42 },
+        { item_uuid: 'mock-sp-spray', item_type_id: ITEM_TYPE_SPRAY, base_cost: 325, discounted_cost: 228, discount_percent: 30 },
+        { item_uuid: 'mock-sp-buddy', item_type_id: ITEM_TYPE_BUDDY, base_cost: 475, discounted_cost: 333, discount_percent: 30 },
+        { item_uuid: 'mock-sp-card', item_type_id: ITEM_TYPE_PLAYERCARD, base_cost: 375, discounted_cost: 263, discount_percent: 30 },
       ],
     },
     {
@@ -123,9 +157,9 @@ const MOCK_STOREFRONT: Storefront = {
       total_discount_percent: 30.0,
       bundle_remaining_secs: 3600 * 48,
       items: [
-        { skin_uuid: 'mock-ru-1', base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
-        { skin_uuid: 'mock-ru-2', base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
-        { skin_uuid: 'mock-ru-3', base_cost: 3550, discounted_cost: 2485, discount_percent: 30 },
+        { item_uuid: 'mock-ru-1', item_type_id: ITEM_TYPE_SKIN, base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
+        { item_uuid: 'mock-ru-2', item_type_id: ITEM_TYPE_SKIN, base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
+        { item_uuid: 'mock-ru-3', item_type_id: ITEM_TYPE_SKIN, base_cost: 3550, discounted_cost: 2485, discount_percent: 30 },
       ],
     },
   ],
@@ -172,11 +206,20 @@ function SectionHeader({ label, countdown }: SectionHeaderProps) {
 
 interface BundleGroupProps {
   bundle: Bundle
-  skinMap: Record<string, SkinWeapon | null>
+  itemMap: Record<string, ItemInfo | null>
 }
 
-function BundleGroup({ bundle, skinMap }: BundleGroupProps) {
+function BundleGroup({ bundle, itemMap }: BundleGroupProps) {
   const remaining = useCountdown(bundle.bundle_remaining_secs)
+
+  // Classify by resolved itemMap kind rather than type_id, so items with unexpected
+  // type IDs that resolve to flex are still shown as large cards.
+  const largeItems = bundle.items.filter(
+    (i) => i.item_type_id === ITEM_TYPE_SKIN || itemMap[i.item_uuid]?.kind === 'flex'
+  )
+  const bonusItems = bundle.items.filter(
+    (i) => i.item_type_id !== ITEM_TYPE_SKIN && itemMap[i.item_uuid]?.kind !== 'flex'
+  )
 
   return (
     <div className="flex flex-col gap-2">
@@ -199,22 +242,99 @@ function BundleGroup({ bundle, skinMap }: BundleGroupProps) {
           </span>
         )}
       </div>
-      <div className="flex gap-4 overflow-x-auto pb-1 shop-scrollbar">
-        {bundle.items.map((item) => {
-          const skin = skinMap[item.skin_uuid] ?? null
+      <div className="flex gap-4 overflow-x-auto pb-1 shop-scrollbar min-h-[155px]">
+        {largeItems.map((item) => {
+          const info = itemMap[item.item_uuid] ?? null
+          const skin = info?.kind === 'skin' ? info.data : null
+          const flex = info?.kind === 'flex' ? info.data : null
           const hex = tierHex(skin?.tier_color ?? null)
           return (
-            <div key={item.skin_uuid} className="w-[276px] shrink-0">
+            <div key={item.item_uuid} className="w-[276px] shrink-0">
               <SkinCard
                 skin={skin}
-                offer={{ skin_uuid: item.skin_uuid, vp_cost: item.discounted_cost }}
+                offer={{ skin_uuid: item.item_uuid, vp_cost: item.discounted_cost }}
                 hex={hex}
                 strikePrice={item.base_cost}
                 discountPercent={Math.round(item.discount_percent)}
+                fallbackName={flex?.display_name}
+                fallbackIcon={flex?.display_icon}
               />
             </div>
           )
         })}
+        {bonusItems.map((item) => (
+          <BonusItemCard
+            key={item.item_uuid}
+            item={item}
+            info={itemMap[item.item_uuid] ?? null}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface BonusItemCardProps {
+  item: Bundle['items'][number]
+  info: ItemInfo | null
+}
+
+function BonusItemCard({ item, info }: BonusItemCardProps) {
+  let icon: string | null = null
+  let name: string | null = null
+  let label: string | null = null
+
+  if (info?.kind === 'buddy') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Buddy'
+  } else if (info?.kind === 'spray') {
+    icon = info.data.full_transparent_icon ?? info.data.display_icon
+    name = info.data.display_name
+    label = 'Spray'
+  } else if (info?.kind === 'playercard') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Card'
+  } else if (info?.kind === 'flex') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Title'
+  }
+
+  return (
+    <div className="w-[120px] shrink-0 rounded overflow-hidden bg-neutral-800/60 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-3 min-h-0">
+        {icon ? (
+          <img
+            src={icon}
+            alt={name ?? ''}
+            className="w-full h-full object-contain"
+            loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+          />
+        ) : (
+          <div className="w-full h-full rounded bg-neutral-700/50" />
+        )}
+      </div>
+      <div className="px-2 pb-2 shrink-0">
+        {label && (
+          <div className="text-[10px] text-neutral-400 uppercase tracking-wider leading-none mb-1">
+            {label}
+          </div>
+        )}
+        <div className="text-xs font-medium text-white truncate leading-tight mb-1">
+          {name ?? item.item_uuid}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-white/35 line-through tabular-nums">
+            {formatVp(item.base_cost)}
+          </span>
+          <div className="flex items-center gap-0.5 text-xs text-white/70">
+            <VpIcon />
+            <span className="tabular-nums">{formatVp(item.discounted_cost)}</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -227,6 +347,7 @@ interface ShopWindowProps {
 export function ShopWindow({ accountId }: ShopWindowProps) {
   const [storefront, setStorefront] = useState<Storefront | null>(null)
   const [skinMap, setSkinMap] = useState<Record<string, SkinWeapon | null>>({})
+  const [itemMap, setItemMap] = useState<Record<string, ItemInfo | null>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -261,24 +382,70 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
           const sf = await getShop(accountId, cookies)
           setStorefront(sf)
 
-          const allUuids = [
-            ...(sf.bundles ?? []).flatMap((b) => b.items.map((i) => i.skin_uuid)),
+          // Skin UUIDs: daily offers, night market, and bundle skin items
+          const skinUuids = [
             ...sf.daily_offers.map((o) => o.skin_uuid),
             ...(sf.night_market ?? []).map((o) => o.skin_uuid),
+            ...(sf.bundles ?? []).flatMap((b) =>
+              b.items.filter((i) => i.item_type_id === ITEM_TYPE_SKIN).map((i) => i.item_uuid)
+            ),
           ]
 
-          if (allUuids.length === 0) return
+          // For bonus bundle items, try all bonus-type DBs regardless of item_type_id.
+          // The actual storefront type IDs may differ from our constants, so we let the
+          // DB lookups determine the item type rather than relying on type_id matching.
+          const bundleItems = (sf.bundles ?? []).flatMap((b) => b.items)
+          const bonusBundleUuids = bundleItems
+            .filter((i) => i.item_type_id !== ITEM_TYPE_SKIN)
+            .map((i) => i.item_uuid)
 
-          try {
-            const results = await getSkinInfoBatch(allUuids)
-            const map: Record<string, SkinWeapon | null> = {}
-            for (let i = 0; i < allUuids.length; i++) {
-              map[allUuids[i]] = results[i] ?? null
-            }
-            setSkinMap(map)
-          } catch {
-            // skin info load failure is non-fatal
+          const fetches = await Promise.allSettled([
+            skinUuids.length > 0 ? getSkinInfoBatch(skinUuids) : Promise.resolve([]),
+            bonusBundleUuids.length > 0 ? getBuddyInfoBatch(bonusBundleUuids) : Promise.resolve([]),
+            bonusBundleUuids.length > 0 ? getPlayercardInfoBatch(bonusBundleUuids) : Promise.resolve([]),
+            bonusBundleUuids.length > 0 ? getSprayInfoBatch(bonusBundleUuids) : Promise.resolve([]),
+            bonusBundleUuids.length > 0 ? getFlexInfoBatch(bonusBundleUuids) : Promise.resolve([]),
+          ])
+
+          const newSkinMap: Record<string, SkinWeapon | null> = {}
+          const newItemMap: Record<string, ItemInfo | null> = {}
+
+          if (fetches[0].status === 'fulfilled') {
+            const results = fetches[0].value as (SkinWeapon | null)[]
+            skinUuids.forEach((uuid, i) => { newSkinMap[uuid] = results[i] ?? null })
+            skinUuids.forEach((uuid, i) => {
+              const d = results[i]
+              newItemMap[uuid] = d ? { kind: 'skin', data: d } : null
+            })
           }
+
+          const buddyResults = fetches[1].status === 'fulfilled'
+            ? fetches[1].value as (BuddyItem | null)[]
+            : new Array<BuddyItem | null>(bonusBundleUuids.length).fill(null)
+          const cardResults = fetches[2].status === 'fulfilled'
+            ? fetches[2].value as (PlayercardItem | null)[]
+            : new Array<PlayercardItem | null>(bonusBundleUuids.length).fill(null)
+          const sprayResults = fetches[3].status === 'fulfilled'
+            ? fetches[3].value as (SprayItem | null)[]
+            : new Array<SprayItem | null>(bonusBundleUuids.length).fill(null)
+          const flexResults = fetches[4].status === 'fulfilled'
+            ? fetches[4].value as (FlexItem | null)[]
+            : new Array<FlexItem | null>(bonusBundleUuids.length).fill(null)
+
+          bonusBundleUuids.forEach((uuid, i) => {
+            const buddy = buddyResults[i]
+            const card = cardResults[i]
+            const spray = sprayResults[i]
+            const flex = flexResults[i]
+            if (buddy) newItemMap[uuid] = { kind: 'buddy', data: buddy }
+            else if (card) newItemMap[uuid] = { kind: 'playercard', data: card }
+            else if (spray) newItemMap[uuid] = { kind: 'spray', data: spray }
+            else if (flex) newItemMap[uuid] = { kind: 'flex', data: flex }
+            else newItemMap[uuid] = null
+          })
+
+          setSkinMap(newSkinMap)
+          setItemMap(newItemMap)
         })
         .catch((e) => setError(String(e)))
         .finally(() => setLoading(false))
@@ -316,7 +483,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
                 <SectionHeader label="Bundles" />
                 <div className="flex flex-col gap-6">
                   {bundles.map((bundle, i) => (
-                    <BundleGroup key={i} bundle={bundle} skinMap={skinMap} />
+                    <BundleGroup key={i} bundle={bundle} itemMap={itemMap} />
                   ))}
                 </div>
               </section>
@@ -404,9 +571,15 @@ interface SkinCardProps {
   hex: string | null
   strikePrice?: number
   discountPercent?: number
+  fallbackName?: string
+  fallbackIcon?: string | null
 }
 
-function SkinCard({ skin, offer, hex, strikePrice, discountPercent }: SkinCardProps) {
+function SkinCard({ skin, offer, hex, strikePrice, discountPercent, fallbackName, fallbackIcon }: SkinCardProps) {
+  const displayName = skin?.display_name ?? fallbackName
+  const displayIcon = skin?.display_icon ?? fallbackIcon ?? null
+  const hasData = displayName !== undefined
+
   return (
     <div
       className="rounded aspect-[16/9] relative overflow-hidden"
@@ -428,22 +601,27 @@ function SkinCard({ skin, offer, hex, strikePrice, discountPercent }: SkinCardPr
           </span>
         )}
       </div>
-      {skin === null ? (
+      {!hasData ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-xs text-neutral-500 uppercase tracking-widest">No data</span>
         </div>
       ) : (
         <>
-          <img
-            src={skinImageUrl(skin, offer.skin_uuid)}
-            alt={skin.display_name}
-            className="w-full h-full object-contain p-4 pb-9"
-            loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-          />
+          {displayIcon && (
+            <img
+              src={displayIcon}
+              alt={displayName}
+              className="w-full h-full object-contain p-4 pb-9"
+              loading="lazy"
+              onError={(e) => { e.currentTarget.style.display = 'none' }}
+            />
+          )}
           <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 text-sm font-semibold text-white uppercase tracking-wide leading-tight">
-            {skin.display_name}
+            {displayName}
           </div>
+          {skin?.tier_icon && (
+            <img src={skin.tier_icon} alt="" className="absolute bottom-2 right-3 w-4 h-4 opacity-80" />
+          )}
         </>
       )}
     </div>
