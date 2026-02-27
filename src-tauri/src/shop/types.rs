@@ -31,10 +31,35 @@ pub struct NightMarketOffer {
     pub discount_percent: f64,
 }
 
+/// Individual skin item within a featured bundle.
+///
+/// `discount_percent` is stored as a percentage (0–100), matching `NightMarketOffer`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BundleItem {
+    pub skin_uuid: String,
+    pub base_cost: u64,
+    pub discounted_cost: u64,
+    pub discount_percent: f64,
+}
+
+/// A featured bundle shown in the shop.
+///
+/// `total_discount_percent` is stored as a percentage (0–100).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bundle {
+    pub name: String,
+    pub total_base_cost: u64,
+    pub total_discounted_cost: u64,
+    pub total_discount_percent: f64,
+    pub bundle_remaining_secs: u64,
+    pub items: Vec<BundleItem>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Storefront {
     pub daily_offers: Vec<DailyOffer>,
     pub daily_remaining_secs: u64,
+    pub bundles: Option<Vec<Bundle>>,
     pub night_market: Option<Vec<NightMarketOffer>>,
     pub night_market_remaining_secs: Option<u64>,
 }
@@ -47,6 +72,54 @@ pub(super) struct ApiStorefront {
     pub(super) skins_panel_layout: SkinsPanelLayout,
     #[serde(rename = "BonusStore")]
     pub(super) bonus_store: Option<BonusStoreData>,
+    #[serde(rename = "FeaturedBundle")]
+    pub(super) featured_bundle: Option<FeaturedBundleWrapper>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct FeaturedBundleWrapper {
+    /// The individual bundles currently featured.  Usually 1–2 entries.
+    #[serde(rename = "Bundles")]
+    pub(super) bundles: Vec<ApiBundleData>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiBundleData {
+    /// UUID used to look up the bundle display name on valorant-api.com.
+    #[serde(rename = "DataAssetID")]
+    pub(super) data_asset_id: String,
+    #[serde(rename = "Items")]
+    pub(super) items: Vec<ApiBundleItem>,
+    #[serde(rename = "TotalBaseCost")]
+    pub(super) total_base_cost: Option<HashMap<String, u64>>,
+    #[serde(rename = "TotalDiscountedCost")]
+    pub(super) total_discounted_cost: Option<HashMap<String, u64>>,
+    /// Fraction in [0, 1].
+    #[serde(rename = "TotalDiscountPercent")]
+    pub(super) total_discount_percent: f64,
+    #[serde(rename = "DurationRemainingInSeconds")]
+    pub(super) duration_remaining_secs: u64,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiBundleItem {
+    #[serde(rename = "Item")]
+    pub(super) item: ApiBundleItemDetail,
+    #[serde(rename = "BasePrice")]
+    pub(super) base_price: u64,
+    /// Fraction in [0, 1].
+    #[serde(rename = "DiscountPercent")]
+    pub(super) discount_percent: f64,
+    #[serde(rename = "DiscountedPrice")]
+    pub(super) discounted_price: u64,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiBundleItemDetail {
+    #[serde(rename = "ItemTypeID")]
+    pub(super) item_type_id: String,
+    #[serde(rename = "ItemID")]
+    pub(super) item_id: String,
 }
 
 #[derive(Deserialize)]
