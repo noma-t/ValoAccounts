@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
-import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile, getAccountCookies } from '../lib/tauri'
-import type { RiotCookies } from '../lib/tauri'
+import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile, openShopWindow } from '../lib/tauri'
 import { RANK_ICON_MAP } from '../types/account'
 import type { Account, UpdateAccount, ValorantRank } from '../types/account'
 import { EditAccountModal } from '../components/EditAccountModal'
-import { ShopModal } from '../components/ShopModal'
 import { useToast } from '../components/Toast'
 
 const TIER_ID_TO_RANK: Record<number, string | null> = {
@@ -206,8 +204,6 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
-  const [shopAccount, setShopAccount] = useState<Account | null>(null)
-  const [shopCookies, setShopCookies] = useState<RiotCookies | null>(null)
   const [isSwitching, setIsSwitching] = useState(false)
 
   const selectDisabled = riotClientRunning || valorantRunning || isSwitching
@@ -266,13 +262,14 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   }
 
   async function handleOpenShop(account: Account) {
+    const title = account.tagline
+      ? `${account.riot_id}#${account.tagline}`
+      : (account.riot_id ?? 'Shop')
     try {
-      const cookies = await getAccountCookies(account.id)
-      setShopCookies(cookies)
+      await openShopWindow(account.id, title)
     } catch {
-      setShopCookies(null)
+      toast('error', 'Failed to open shop window')
     }
-    setShopAccount(account)
   }
 
   async function handleRefreshRank(account: Account) {
@@ -370,11 +367,6 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
         account={editingAccount}
         onClose={() => setEditingAccount(null)}
         onSubmit={handleEditSubmit}
-      />
-      <ShopModal
-        account={shopAccount}
-        cookies={shopCookies}
-        onClose={() => setShopAccount(null)}
       />
     </div>
   )

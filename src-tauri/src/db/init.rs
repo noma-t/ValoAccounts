@@ -107,6 +107,11 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
         [],
     );
 
+    let _ = conn.execute(
+        "ALTER TABLE storefront_cache ADD COLUMN bundles_json TEXT",
+        [],
+    );
+
     migrate_existing_accounts(conn)?;
 
     Ok(())

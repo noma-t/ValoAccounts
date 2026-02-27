@@ -8,7 +8,7 @@ mod version;
 pub use cache::{load_cached_storefront, save_storefront_cache};
 pub use error::ShopError;
 #[allow(unused_imports)]
-pub use types::{DailyOffer, NightMarketOffer, RiotCookies, Storefront};
+pub use types::{Bundle, BundleItem, DailyOffer, NightMarketOffer, RiotCookies, Storefront};
 
 use client::ShopClient;
 use version::fetch_version_info;

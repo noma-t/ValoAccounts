@@ -1,11 +1,46 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use reqwest::cookie::{CookieStore, Jar};
 use reqwest::Client;
+use serde::Deserialize;
 
 use super::error::ShopError;
 use super::storefront::{extract_access_token, parse_storefront};
 use super::types::{ApiStorefront, EntitlementsResponse, RiotCookies, Storefront, UserInfoResponse};
+
+const VALORANT_API_BUNDLE_URL: &str = "https://valorant-api.com/v1/bundles/";
+
+#[derive(Deserialize)]
+struct BundleApiResponse {
+    data: BundleApiData,
+}
+
+#[derive(Deserialize)]
+struct BundleApiData {
+    #[serde(rename = "displayName")]
+    display_name: String,
+}
+
+/// Fetch the display name for a bundle from valorant-api.com.
+///
+/// Returns `None` on any network or parse error (non-fatal).
+async fn fetch_bundle_display_name(uuid: &str) -> Option<String> {
+    let url = format!("{}{}", VALORANT_API_BUNDLE_URL, uuid);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let resp: BundleApiResponse = client
+        .get(&url)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    Some(resp.data.display_name)
+}
 
 const AUTH_COOKIES_URL: &str = "https://auth.riotgames.com/api/v1/authorization";
 const AUTH_REAUTH_URL: &str = "https://auth.riotgames.com/authorize";
@@ -213,7 +248,20 @@ impl ShopClient {
                 .await?;
 
             if resp.status().is_success() {
-                match resp.json::<ApiStorefront>().await {
+                let text = match resp.text().await {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+
+                #[cfg(debug_assertions)]
+                {
+                    match std::fs::write("storefront_debug.json", &text) {
+                        Ok(_) => log::debug!("Storefront raw response saved to storefront_debug.json"),
+                        Err(e) => log::warn!("Failed to write storefront_debug.json: {}", e),
+                    }
+                }
+
+                match serde_json::from_str::<ApiStorefront>(&text) {
                     Ok(data) => return Ok(data),
                     Err(_) => continue,
                 }
@@ -235,7 +283,32 @@ impl ShopClient {
         let raw = self
             .get_storefront_raw(&access_token, &entitlements_token, &puuid, client_version)
             .await?;
-        Ok(parse_storefront(raw))
+
+        // Collect DataAssetIDs before raw is consumed by parse_storefront
+        let asset_ids: Vec<String> = raw
+            .featured_bundle
+            .as_ref()
+            .map(|fb| {
+                fb.bundles
+                    .iter()
+                    .map(|b| b.data_asset_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Fetch bundle display names from the public valorant-api.com (non-fatal)
+        let mut bundle_names: HashMap<String, String> = HashMap::new();
+        for asset_id in &asset_ids {
+            match fetch_bundle_display_name(asset_id).await {
+                Some(name) => {
+                    log::debug!("fetch: bundle name for {} = \"{}\"", asset_id, name);
+                    bundle_names.insert(asset_id.clone(), name);
+                }
+                None => log::warn!("fetch: could not get bundle name for {}", asset_id),
+            }
+        }
+
+        Ok(parse_storefront(raw, bundle_names))
     }
 
     /// Extract the current cookie values from the jar after authentication.
