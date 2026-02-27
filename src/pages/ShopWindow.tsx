@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getAccountCookies, getShop, getSkinInfoBatch, isDemoMode } from '../lib/tauri'
 import type { Storefront, SkinWeapon, DailyOffer, NightMarketOffer, Bundle } from '../lib/tauri'
 import '../App.css'
@@ -58,18 +59,6 @@ function cardGradient(hex: string | null): React.CSSProperties {
   }
 }
 
-function nmCardStyle(hex: string | null): React.CSSProperties {
-  if (!hex) {
-    return {
-      background: 'linear-gradient(to bottom, #303030 0%, #1a1a1a 100%)',
-      border: '2px solid #404040',
-    }
-  }
-  return {
-    background: `linear-gradient(to bottom, #${hex}28 0%, #1a1a1a 75%)`,
-    border: `2px solid #${hex}`,
-  }
-}
 
 function VpIcon() {
   return <img src="/valo-icon.svg" alt="" width={12} height={12} className="opacity-70 block shrink-0" />
@@ -115,22 +104,28 @@ const MOCK_STOREFRONT: Storefront = {
   bundles: [
     {
       name: 'Spectrum',
+      total_base_cost: 14875,
+      total_discounted_cost: 8825,
+      total_discount_percent: 40.7,
       bundle_remaining_secs: 3600 * 72,
       items: [
-        { skin_uuid: 'mock-sp-1', vp_cost: 2175 },
-        { skin_uuid: 'mock-sp-2', vp_cost: 2175 },
-        { skin_uuid: 'mock-sp-3', vp_cost: 2175 },
-        { skin_uuid: 'mock-sp-4', vp_cost: 2175 },
-        { skin_uuid: 'mock-sp-5', vp_cost: 4350 },
+        { skin_uuid: 'mock-sp-1', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { skin_uuid: 'mock-sp-2', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { skin_uuid: 'mock-sp-3', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { skin_uuid: 'mock-sp-4', base_cost: 2175, discounted_cost: 1262, discount_percent: 42 },
+        { skin_uuid: 'mock-sp-5', base_cost: 4350, discounted_cost: 2523, discount_percent: 42 },
       ],
     },
     {
       name: 'Ruination',
+      total_base_cost: 7100,
+      total_discounted_cost: 4970,
+      total_discount_percent: 30.0,
       bundle_remaining_secs: 3600 * 48,
       items: [
-        { skin_uuid: 'mock-ru-1', vp_cost: 1775 },
-        { skin_uuid: 'mock-ru-2', vp_cost: 1775 },
-        { skin_uuid: 'mock-ru-3', vp_cost: 3550 },
+        { skin_uuid: 'mock-ru-1', base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
+        { skin_uuid: 'mock-ru-2', base_cost: 1775, discounted_cost: 1243, discount_percent: 30 },
+        { skin_uuid: 'mock-ru-3', base_cost: 3550, discounted_cost: 2485, discount_percent: 30 },
       ],
     },
   ],
@@ -165,12 +160,12 @@ function SectionHeader({ label, countdown }: SectionHeaderProps) {
       <span className="text-xs font-bold uppercase tracking-widest text-neutral-300 shrink-0">
         {label}
       </span>
-      <div className="flex-1 h-px bg-neutral-700/60" />
       {countdown != null && countdown >= 0 && (
         <span className="text-xs tabular-nums text-neutral-500 shrink-0">
           {formatCountdown(countdown)}
         </span>
       )}
+      <div className="flex-1 h-px bg-neutral-700/60" />
     </div>
   )
 }
@@ -185,8 +180,19 @@ function BundleGroup({ bundle, skinMap }: BundleGroupProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-white">{bundle.name}</span>
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-semibold text-white shrink-0">{bundle.name}</span>
+        <div className="flex items-center gap-0.5 text-xs text-white/40">
+          <VpIcon />
+          <span className="line-through tabular-nums">{formatVp(bundle.total_base_cost)}</span>
+        </div>
+        <span className="text-xs font-semibold text-green-400">
+          -{Math.round(bundle.total_discount_percent)}%
+        </span>
+        <div className="flex items-center gap-0.5 text-sm font-semibold text-white">
+          <VpIcon />
+          <span className="tabular-nums">{formatVp(bundle.total_discounted_cost)}</span>
+        </div>
         {remaining !== null && (
           <span className="text-xs tabular-nums text-neutral-500">
             {formatCountdown(remaining)}
@@ -199,7 +205,13 @@ function BundleGroup({ bundle, skinMap }: BundleGroupProps) {
           const hex = tierHex(skin?.tier_color ?? null)
           return (
             <div key={item.skin_uuid} className="w-[276px] shrink-0">
-              <SkinCard skin={skin} offer={item} hex={hex} />
+              <SkinCard
+                skin={skin}
+                offer={{ skin_uuid: item.skin_uuid, vp_cost: item.discounted_cost }}
+                hex={hex}
+                strikePrice={item.base_cost}
+                discountPercent={Math.round(item.discount_percent)}
+              />
             </div>
           )
         })}
@@ -220,6 +232,14 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
 
   const dailyRemaining = useCountdown(storefront?.daily_remaining_secs ?? null)
   const nightmarketRemaining = useCountdown(storefront?.night_market_remaining_secs ?? null)
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') getCurrentWindow().close()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     isDemoMode().then((isDemo) => {
@@ -329,6 +349,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
   )
 }
 
+
 interface NightMarketCardProps {
   skin: SkinWeapon | null
   offer: NightMarketOffer
@@ -342,21 +363,18 @@ function NightMarketCard({ skin, offer, hex }: NightMarketCardProps) {
       style={cardGradient(hex)}
     >
       <div className="absolute top-2 left-2">
-        <span
-          className="text-xs font-bold leading-none"
-          style={{ color: hex ? `#${hex}` : '#9ca3af' }}
-        >
-          -{offer.discount_percent}%
+        <span className="text-xs font-bold text-red-400 leading-none tabular-nums">
+          -{Math.round(offer.discount_percent)}%
         </span>
       </div>
 
       <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
-        <span className="text-[11px] text-white/40 line-through leading-none">
+        <span className="text-[10px] text-white/40 line-through leading-none tabular-nums">
           {formatVp(offer.base_cost)}
         </span>
         <div className="flex items-center gap-0.5 text-xs text-white/80 leading-none">
           <VpIcon />
-          <span>{formatVp(offer.discount_cost)}</span>
+          <span className="tabular-nums">{formatVp(offer.discount_cost)}</span>
         </div>
       </div>
 

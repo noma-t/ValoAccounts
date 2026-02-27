@@ -95,11 +95,18 @@ export interface NightMarketOffer {
 
 export interface BundleItem {
   skin_uuid: string
-  vp_cost: number
+  base_cost: number
+  discounted_cost: number
+  /** 0–100 */
+  discount_percent: number
 }
 
 export interface Bundle {
   name: string
+  total_base_cost: number
+  total_discounted_cost: number
+  /** 0–100 */
+  total_discount_percent: number
   bundle_remaining_secs: number
   items: BundleItem[]
 }
