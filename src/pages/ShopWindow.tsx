@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getAccountCookies, getShop, getSkinInfoBatch, isDemoMode } from '../lib/tauri'
-import type { Storefront, SkinWeapon, DailyOffer } from '../lib/tauri'
+import type { Storefront, SkinWeapon, DailyOffer, NightMarketOffer, Bundle } from '../lib/tauri'
 import '../App.css'
 
 function formatCountdown(totalSecs: number): string {
@@ -58,12 +58,21 @@ function cardGradient(hex: string | null): React.CSSProperties {
   }
 }
 
+function nmCardStyle(hex: string | null): React.CSSProperties {
+  if (!hex) {
+    return {
+      background: 'linear-gradient(to bottom, #303030 0%, #1a1a1a 100%)',
+      border: '2px solid #404040',
+    }
+  }
+  return {
+    background: `linear-gradient(to bottom, #${hex}28 0%, #1a1a1a 75%)`,
+    border: `2px solid #${hex}`,
+  }
+}
+
 function VpIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2L3 7v6c0 5.25 3.75 10.14 9 11.25C17.25 23.14 21 18.25 21 13V7l-9-5z" fill="currentColor" opacity="0.7" />
-    </svg>
-  )
+  return <img src="/valo-icon.svg" alt="" width={12} height={12} className="opacity-70 block shrink-0" />
 }
 
 function skinImageUrl(skin: SkinWeapon | null, levelUuid: string): string {
@@ -75,25 +84,128 @@ function formatVp(vp: number): string {
   return vp.toLocaleString()
 }
 
-const MOCK_OFFERS: DailyOffer[] = [
-  { skin_uuid: 'mock-a', vp_cost: 1775 },
-  { skin_uuid: 'mock-b', vp_cost: 2175 },
-  { skin_uuid: 'mock-c', vp_cost: 3550 },
-  { skin_uuid: 'mock-d', vp_cost: 1275 },
-]
+// --- Mock data ---
 
 const MOCK_SKIN_MAP: Record<string, SkinWeapon> = {
+  // Bundle: Spectrum (5 items)
+  'mock-sp-1': { uuid: 'mock-sp-1', display_name: 'Spectrum Phantom', display_icon: null, tier_color: '0096FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-sp-2': { uuid: 'mock-sp-2', display_name: 'Spectrum Vandal', display_icon: null, tier_color: '0096FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-sp-3': { uuid: 'mock-sp-3', display_name: 'Spectrum Operator', display_icon: null, tier_color: '0096FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-sp-4': { uuid: 'mock-sp-4', display_name: 'Spectrum Sheriff', display_icon: null, tier_color: '0096FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-sp-5': { uuid: 'mock-sp-5', display_name: 'Spectrum Knife', display_icon: null, tier_color: '0096FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  // Bundle: Ruination (3 items)
+  'mock-ru-1': { uuid: 'mock-ru-1', display_name: 'Ruination Phantom', display_icon: null, tier_color: '9147FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-ru-2': { uuid: 'mock-ru-2', display_name: 'Ruination Vandal', display_icon: null, tier_color: '9147FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-ru-3': { uuid: 'mock-ru-3', display_name: 'Ruination Knife', display_icon: null, tier_color: '9147FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  // Daily (4 items)
   'mock-a': { uuid: 'mock-a', display_name: 'DEMO Phantom', display_icon: null, tier_color: 'FF4655', tier_uuid: null, tier_rank: null, tier_icon: null },
   'mock-b': { uuid: 'mock-b', display_name: 'DEMO Vandal', display_icon: null, tier_color: '009BDE', tier_uuid: null, tier_rank: null, tier_icon: null },
   'mock-c': { uuid: 'mock-c', display_name: 'DEMO Operator', display_icon: null, tier_color: 'F5A623', tier_uuid: null, tier_rank: null, tier_icon: null },
   'mock-d': { uuid: 'mock-d', display_name: 'DEMO Knife', display_icon: null, tier_color: 'BD3944', tier_uuid: null, tier_rank: null, tier_icon: null },
+  // Nightmarket (6 items)
+  'mock-nm-1': { uuid: 'mock-nm-1', display_name: 'Prime Phantom', display_icon: null, tier_color: 'F0C75E', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-nm-2': { uuid: 'mock-nm-2', display_name: 'Ion Vandal', display_icon: null, tier_color: '5CFFCB', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-nm-3': { uuid: 'mock-nm-3', display_name: 'Elderflame Operator', display_icon: null, tier_color: 'FF6B35', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-nm-4': { uuid: 'mock-nm-4', display_name: 'Glitchpop Frenzy', display_icon: null, tier_color: 'FF00FF', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-nm-5': { uuid: 'mock-nm-5', display_name: 'Reaver Sheriff', display_icon: null, tier_color: 'E74C3C', tier_uuid: null, tier_rank: null, tier_icon: null },
+  'mock-nm-6': { uuid: 'mock-nm-6', display_name: 'Origin Guardian', display_icon: null, tier_color: '7B68EE', tier_uuid: null, tier_rank: null, tier_icon: null },
 }
 
 const MOCK_STOREFRONT: Storefront = {
-  daily_offers: MOCK_OFFERS,
+  bundles: [
+    {
+      name: 'Spectrum',
+      bundle_remaining_secs: 3600 * 72,
+      items: [
+        { skin_uuid: 'mock-sp-1', vp_cost: 2175 },
+        { skin_uuid: 'mock-sp-2', vp_cost: 2175 },
+        { skin_uuid: 'mock-sp-3', vp_cost: 2175 },
+        { skin_uuid: 'mock-sp-4', vp_cost: 2175 },
+        { skin_uuid: 'mock-sp-5', vp_cost: 4350 },
+      ],
+    },
+    {
+      name: 'Ruination',
+      bundle_remaining_secs: 3600 * 48,
+      items: [
+        { skin_uuid: 'mock-ru-1', vp_cost: 1775 },
+        { skin_uuid: 'mock-ru-2', vp_cost: 1775 },
+        { skin_uuid: 'mock-ru-3', vp_cost: 3550 },
+      ],
+    },
+  ],
+  daily_offers: [
+    { skin_uuid: 'mock-a', vp_cost: 1775 },
+    { skin_uuid: 'mock-b', vp_cost: 2175 },
+    { skin_uuid: 'mock-c', vp_cost: 3550 },
+    { skin_uuid: 'mock-d', vp_cost: 1275 },
+  ],
   daily_remaining_secs: 3600 * 8,
-  night_market: null,
-  night_market_remaining_secs: null,
+  night_market: [
+    { skin_uuid: 'mock-nm-1', base_cost: 2175, discount_cost: 870, discount_percent: 60 },
+    { skin_uuid: 'mock-nm-2', base_cost: 2175, discount_cost: 1305, discount_percent: 40 },
+    { skin_uuid: 'mock-nm-3', base_cost: 2675, discount_cost: 1337, discount_percent: 50 },
+    { skin_uuid: 'mock-nm-4', base_cost: 2175, discount_cost: 1740, discount_percent: 20 },
+    { skin_uuid: 'mock-nm-5', base_cost: 1775, discount_cost: 533, discount_percent: 70 },
+    { skin_uuid: 'mock-nm-6', base_cost: 1775, discount_cost: 1243, discount_percent: 30 },
+  ],
+  night_market_remaining_secs: 3600 * 24 * 5,
+}
+
+// --- Components ---
+
+interface SectionHeaderProps {
+  label: string
+  countdown?: number | null
+}
+
+function SectionHeader({ label, countdown }: SectionHeaderProps) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <span className="text-xs font-bold uppercase tracking-widest text-neutral-300 shrink-0">
+        {label}
+      </span>
+      <div className="flex-1 h-px bg-neutral-700/60" />
+      {countdown != null && countdown >= 0 && (
+        <span className="text-xs tabular-nums text-neutral-500 shrink-0">
+          {formatCountdown(countdown)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+interface BundleGroupProps {
+  bundle: Bundle
+  skinMap: Record<string, SkinWeapon | null>
+}
+
+function BundleGroup({ bundle, skinMap }: BundleGroupProps) {
+  const remaining = useCountdown(bundle.bundle_remaining_secs)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-white">{bundle.name}</span>
+        {remaining !== null && (
+          <span className="text-xs tabular-nums text-neutral-500">
+            {formatCountdown(remaining)}
+          </span>
+        )}
+      </div>
+      <div className="flex gap-4 overflow-x-auto pb-1 shop-scrollbar">
+        {bundle.items.map((item) => {
+          const skin = skinMap[item.skin_uuid] ?? null
+          const hex = tierHex(skin?.tier_color ?? null)
+          return (
+            <div key={item.skin_uuid} className="w-[276px] shrink-0">
+              <SkinCard skin={skin} offer={item} hex={hex} />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 interface ShopWindowProps {
@@ -105,7 +217,9 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
   const [skinMap, setSkinMap] = useState<Record<string, SkinWeapon | null>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
   const dailyRemaining = useCountdown(storefront?.daily_remaining_secs ?? null)
+  const nightmarketRemaining = useCountdown(storefront?.night_market_remaining_secs ?? null)
 
   useEffect(() => {
     isDemoMode().then((isDemo) => {
@@ -128,6 +242,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
           setStorefront(sf)
 
           const allUuids = [
+            ...(sf.bundles ?? []).flatMap((b) => b.items.map((i) => i.skin_uuid)),
             ...sf.daily_offers.map((o) => o.skin_uuid),
             ...(sf.night_market ?? []).map((o) => o.skin_uuid),
           ]
@@ -150,17 +265,12 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
     })
   }, [accountId])
 
+  const bundles = storefront?.bundles ?? []
+  const nightMarket = storefront?.night_market ?? null
+
   return (
     <div className="min-h-screen bg-neutral-900 text-white flex flex-col">
-      {dailyRemaining !== null && (
-        <div className="px-4 py-2 border-b border-neutral-700/50">
-          <span className="text-xs tabular-nums text-neutral-500">
-            {formatCountdown(dailyRemaining)}
-          </span>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto shop-scrollbar p-4">
+      <div className="flex-1 overflow-y-auto shop-scrollbar p-6">
         {loading ? (
           <div className="text-sm text-neutral-400 text-center py-8">
             <img src="/refresh-icon.svg" alt="" className="w-5 h-5 animate-spin inline-block" />
@@ -168,47 +278,103 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
         ) : error ? (
           <div className="text-sm text-red-400 text-center py-8">{error}</div>
         ) : storefront ? (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
-              {storefront.daily_offers.map((offer) => {
-                const skin = skinMap[offer.skin_uuid] ?? null
-                const hex = tierHex(skin?.tier_color ?? null)
-                return (
-                  <SkinCard
-                    key={offer.skin_uuid}
-                    skin={skin}
-                    offer={offer}
-                    hex={hex}
-                  />
-                )
-              })}
-            </div>
+          <div className="flex flex-col gap-8">
 
-            {storefront.night_market && storefront.night_market.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">
-                  Night Market
+            <section>
+              <SectionHeader label="Daily" countdown={dailyRemaining} />
+              <div className="grid grid-cols-4 gap-4">
+                {storefront.daily_offers.map((offer) => {
+                  const skin = skinMap[offer.skin_uuid] ?? null
+                  const hex = tierHex(skin?.tier_color ?? null)
+                  return <SkinCard key={offer.skin_uuid} skin={skin} offer={offer} hex={hex} />
+                })}
+              </div>
+            </section>
+
+            {bundles.length > 0 && (
+              <section>
+                <SectionHeader label="Bundles" />
+                <div className="flex flex-col gap-6">
+                  {bundles.map((bundle, i) => (
+                    <BundleGroup key={i} bundle={bundle} skinMap={skinMap} />
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {storefront.night_market.map((offer) => {
+              </section>
+            )}
+
+            {nightMarket && nightMarket.length > 0 && (
+              <section>
+                <SectionHeader label="Night Market" countdown={nightmarketRemaining} />
+                <div className="grid grid-cols-6 gap-4">
+                  {nightMarket.map((offer) => {
                     const skin = skinMap[offer.skin_uuid] ?? null
                     const hex = tierHex(skin?.tier_color ?? null)
                     return (
-                      <SkinCard
+                      <NightMarketCard
                         key={offer.skin_uuid}
                         skin={skin}
-                        offer={{ skin_uuid: offer.skin_uuid, vp_cost: offer.discount_cost }}
+                        offer={offer}
                         hex={hex}
-                        strikePrice={offer.base_cost}
-                        discountPercent={offer.discount_percent}
                       />
                     )
                   })}
                 </div>
-              </div>
+              </section>
             )}
+
           </div>
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+interface NightMarketCardProps {
+  skin: SkinWeapon | null
+  offer: NightMarketOffer
+  hex: string | null
+}
+
+function NightMarketCard({ skin, offer, hex }: NightMarketCardProps) {
+  return (
+    <div
+      className="rounded aspect-[3/4] relative overflow-hidden"
+      style={cardGradient(hex)}
+    >
+      <div className="absolute top-2 left-2">
+        <span
+          className="text-xs font-bold leading-none"
+          style={{ color: hex ? `#${hex}` : '#9ca3af' }}
+        >
+          -{offer.discount_percent}%
+        </span>
+      </div>
+
+      <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
+        <span className="text-[11px] text-white/40 line-through leading-none">
+          {formatVp(offer.base_cost)}
+        </span>
+        <div className="flex items-center gap-0.5 text-xs text-white/80 leading-none">
+          <VpIcon />
+          <span>{formatVp(offer.discount_cost)}</span>
+        </div>
+      </div>
+
+      <img
+        src={skinImageUrl(skin, offer.skin_uuid)}
+        alt={skin?.display_name ?? offer.skin_uuid}
+        className="w-full h-full object-contain p-3 pb-10"
+        loading="lazy"
+        onError={(e) => { e.currentTarget.style.display = 'none' }}
+      />
+
+      <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 flex items-end justify-between gap-1">
+        <span className="text-[11px] font-semibold text-white uppercase tracking-wide leading-tight">
+          {skin?.display_name ?? offer.skin_uuid}
+        </span>
+        {skin?.tier_icon && (
+          <img src={skin.tier_icon} alt="" className="w-4 h-4 shrink-0 opacity-80" />
+        )}
       </div>
     </div>
   )
@@ -228,18 +394,18 @@ function SkinCard({ skin, offer, hex, strikePrice, discountPercent }: SkinCardPr
       className="rounded aspect-[16/9] relative overflow-hidden"
       style={cardGradient(hex)}
     >
-      <div className="absolute top-1.5 right-2 flex flex-col items-end gap-0.5">
+      <div className="absolute top-2 right-3 flex flex-col items-end gap-0.5">
         {strikePrice !== undefined && (
-          <span className="text-[11px] text-white/40 line-through leading-none">
+          <span className="text-xs text-white/40 line-through leading-none">
             {formatVp(strikePrice)}
           </span>
         )}
-        <div className="flex items-center gap-1 text-[13px] text-white/80">
+        <div className="flex items-center gap-1 text-sm text-white/80 leading-none">
           <VpIcon />
           <span>{formatVp(offer.vp_cost)}</span>
         </div>
         {discountPercent !== undefined && (
-          <span className="text-[10px] text-green-400 leading-none">
+          <span className="text-xs text-green-400 leading-none">
             -{discountPercent}%
           </span>
         )}
@@ -247,11 +413,11 @@ function SkinCard({ skin, offer, hex, strikePrice, discountPercent }: SkinCardPr
       <img
         src={skinImageUrl(skin, offer.skin_uuid)}
         alt={skin?.display_name ?? offer.skin_uuid}
-        className="w-full h-full object-contain p-3 pb-7"
+        className="w-full h-full object-contain p-4 pb-9"
         loading="lazy"
         onError={(e) => { e.currentTarget.style.display = 'none' }}
       />
-      <div className="absolute bottom-0 left-0 right-0 px-2 pb-1.5 text-[13px] font-semibold text-white uppercase tracking-wide leading-tight">
+      <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 text-sm font-semibold text-white uppercase tracking-wide leading-tight">
         {skin?.display_name ?? offer.skin_uuid}
       </div>
     </div>
