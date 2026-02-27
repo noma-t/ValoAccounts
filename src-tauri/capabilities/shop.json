@@ -4,6 +4,7 @@
   "description": "Capability for shop windows",
   "windows": ["shop-*"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-close"
   ]
 }
