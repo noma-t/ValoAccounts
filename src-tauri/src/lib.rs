@@ -12,7 +12,22 @@ use db::{
 };
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
+
+static DEMO_MODE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn is_demo_mode() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        DEMO_MODE.load(Ordering::Relaxed)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -525,6 +540,29 @@ async fn sync_skins() -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn open_shop_window(app: tauri::AppHandle, account_id: i64, title: String) -> Result<(), String> {
+    let label = format!("shop-{}", account_id);
+
+    if let Some(existing) = app.get_webview_window(&label) {
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("/")),
+    )
+    .title(title)
+    .inner_size(500.0, 520.0)
+    .min_inner_size(400.0, 400.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn switch_account(account_id: Option<i64>) -> Result<(), String> {
     log::info!("Starting account switch: {:?}", account_id);
 
@@ -550,6 +588,12 @@ pub fn run() {
         .init();
 
     log::info!("Starting valo-accounts application");
+
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|a| a == "--demo") {
+        DEMO_MODE.store(true, Ordering::Relaxed);
+        log::info!("Demo mode enabled");
+    }
 
     if let Err(e) = initialize_database(None) {
         log::error!("Failed to initialize database: {}", e);
@@ -602,7 +646,9 @@ pub fn run() {
             get_shop,
             get_skin_info,
             get_skin_info_batch,
-            sync_skins
+            sync_skins,
+            open_shop_window,
+            is_demo_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

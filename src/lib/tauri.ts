@@ -126,6 +126,14 @@ export async function syncSkins(): Promise<boolean> {
   return invoke('sync_skins')
 }
 
+export async function openShopWindow(accountId: number, title: string): Promise<void> {
+  return invoke('open_shop_window', { accountId, title })
+}
+
+export async function isDemoMode(): Promise<boolean> {
+  return invoke('is_demo_mode')
+}
+
 export async function openTrackerProfile(riotId: string, tagline: string): Promise<void> {
   const url = `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(`${riotId}#${tagline}`)}`
   return openUrl(url)
