@@ -93,7 +93,19 @@ export interface NightMarketOffer {
   discount_percent: number
 }
 
+export interface BundleItem {
+  skin_uuid: string
+  vp_cost: number
+}
+
+export interface Bundle {
+  name: string
+  bundle_remaining_secs: number
+  items: BundleItem[]
+}
+
 export interface Storefront {
+  bundles?: Bundle[]
   daily_offers: DailyOffer[]
   daily_remaining_secs: number
   night_market: NightMarketOffer[] | null

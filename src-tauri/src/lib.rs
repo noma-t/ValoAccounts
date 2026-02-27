@@ -554,8 +554,8 @@ async fn open_shop_window(app: tauri::AppHandle, account_id: i64, title: String)
         tauri::WebviewUrl::App(std::path::PathBuf::from("/")),
     )
     .title(title)
-    .inner_size(500.0, 520.0)
-    .min_inner_size(400.0, 400.0)
+    .inner_size(1200.0, 650.0)
+    .min_inner_size(960.0, 600.0)
     .build()
     .map_err(|e| e.to_string())?;
 
