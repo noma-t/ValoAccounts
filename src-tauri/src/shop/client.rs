@@ -248,7 +248,20 @@ impl ShopClient {
                 .await?;
 
             if resp.status().is_success() {
-                match resp.json::<ApiStorefront>().await {
+                let text = match resp.text().await {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+
+                #[cfg(debug_assertions)]
+                {
+                    match std::fs::write("storefront_debug.json", &text) {
+                        Ok(_) => log::debug!("Storefront raw response saved to storefront_debug.json"),
+                        Err(e) => log::warn!("Failed to write storefront_debug.json: {}", e),
+                    }
+                }
+
+                match serde_json::from_str::<ApiStorefront>(&text) {
                     Ok(data) => return Ok(data),
                     Err(_) => continue,
                 }

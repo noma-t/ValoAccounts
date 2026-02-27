@@ -428,16 +428,24 @@ function SkinCard({ skin, offer, hex, strikePrice, discountPercent }: SkinCardPr
           </span>
         )}
       </div>
-      <img
-        src={skinImageUrl(skin, offer.skin_uuid)}
-        alt={skin?.display_name ?? offer.skin_uuid}
-        className="w-full h-full object-contain p-4 pb-9"
-        loading="lazy"
-        onError={(e) => { e.currentTarget.style.display = 'none' }}
-      />
-      <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 text-sm font-semibold text-white uppercase tracking-wide leading-tight">
-        {skin?.display_name ?? offer.skin_uuid}
-      </div>
+      {skin === null ? (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xs text-neutral-500 uppercase tracking-widest">No data</span>
+        </div>
+      ) : (
+        <>
+          <img
+            src={skinImageUrl(skin, offer.skin_uuid)}
+            alt={skin.display_name}
+            className="w-full h-full object-contain p-4 pb-9"
+            loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+          />
+          <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 text-sm font-semibold text-white uppercase tracking-wide leading-tight">
+            {skin.display_name}
+          </div>
+        </>
+      )}
     </div>
   )
 }
