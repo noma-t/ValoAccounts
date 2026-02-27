@@ -303,18 +303,18 @@ function BonusItemCard({ item, info }: BonusItemCardProps) {
   }
 
   return (
-    <div className="w-[120px] shrink-0 rounded overflow-hidden bg-neutral-800/60 flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-3 min-h-0">
+    <div className="w-[120px] h-[155px] shrink-0 rounded overflow-hidden bg-neutral-800/60 flex flex-col">
+      <div className="flex-1 min-h-0 relative">
         {icon ? (
           <img
             src={icon}
             alt={name ?? ''}
-            className="w-full h-full object-contain"
+            className="absolute inset-0 w-full h-full object-contain p-3"
             loading="lazy"
             onError={(e) => { e.currentTarget.style.display = 'none' }}
           />
         ) : (
-          <div className="w-full h-full rounded bg-neutral-700/50" />
+          <div className="absolute inset-3 rounded bg-neutral-700/50" />
         )}
       </div>
       <div className="px-2 pb-2 shrink-0">
