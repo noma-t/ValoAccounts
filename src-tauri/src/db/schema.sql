@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS storefront_cache (
     account_id INTEGER PRIMARY KEY,
     daily_offers_json TEXT NOT NULL,
     night_market_json TEXT,
+    bundles_json TEXT,
     expires_at INTEGER NOT NULL,
     nm_expires_at INTEGER,
     cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
