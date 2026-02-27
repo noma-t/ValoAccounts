@@ -2,8 +2,16 @@ use std::collections::HashMap;
 
 use super::types::{ApiStorefront, Bundle, BundleItem, DailyOffer, NightMarketOffer, Storefront};
 
-/// ItemTypeID for weapon skin levels in the Valorant API.
-const WEAPON_SKIN_ITEM_TYPE_ID: &str = "e7c63390-eda7-46e0-bb7a-a6abdacd2433";
+// Known ItemTypeID values from the Valorant storefront API.
+// These are used on the frontend to dispatch item lookups to the correct DB table.
+#[allow(dead_code)]
+pub const ITEM_TYPE_SKIN: &str = "e7c63390-eda7-46e0-bb7a-a6abdacd2433";
+#[allow(dead_code)]
+pub const ITEM_TYPE_BUDDY: &str = "dd3bf334-87f3-40bd-b043-682a57a8dc3a";
+#[allow(dead_code)]
+pub const ITEM_TYPE_PLAYERCARD: &str = "3f296c07-64c3-494c-923b-fe692a4fa1bd";
+#[allow(dead_code)]
+pub const ITEM_TYPE_SPRAY: &str = "d5f120f8-ff8c-4aac-92ea-f2b5acbe9475";
 
 fn first_cost(cost: &HashMap<String, u64>) -> u64 {
     cost.values().next().copied().unwrap_or(0)
@@ -80,9 +88,9 @@ pub(super) fn parse_storefront(
                 let items: Vec<BundleItem> = bundle
                     .items
                     .into_iter()
-                    .filter(|item| item.item.item_type_id == WEAPON_SKIN_ITEM_TYPE_ID)
                     .map(|item| BundleItem {
-                        skin_uuid: item.item.item_id,
+                        item_uuid: item.item.item_id,
+                        item_type_id: item.item.item_type_id,
                         base_cost: item.base_price,
                         discounted_cost: item.discounted_price,
                         // API gives fraction (0–1); store as percentage (0–100)
@@ -252,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_bundle_items_filtered_to_weapon_skins() {
+    fn test_parse_bundle_items_includes_all_types() {
         use super::super::types::{ApiBundleData, ApiBundleItem, ApiBundleItemDetail, FeaturedBundleWrapper};
 
         let raw = ApiStorefront {
@@ -268,7 +276,7 @@ mod tests {
                     items: vec![
                         ApiBundleItem {
                             item: ApiBundleItemDetail {
-                                item_type_id: WEAPON_SKIN_ITEM_TYPE_ID.to_string(),
+                                item_type_id: ITEM_TYPE_SKIN.to_string(),
                                 item_id: "skin-uuid".to_string(),
                             },
                             base_price: 2175,
@@ -277,13 +285,21 @@ mod tests {
                         },
                         ApiBundleItem {
                             item: ApiBundleItemDetail {
-                                // spray/buddy — should be filtered out
-                                item_type_id: "d5f120f8-ff8c-4aac-92ea-f2b5acbe9475".to_string(),
+                                item_type_id: ITEM_TYPE_SPRAY.to_string(),
                                 item_id: "spray-uuid".to_string(),
                             },
                             base_price: 375,
                             discount_percent: 0.42,
                             discounted_price: 217,
+                        },
+                        ApiBundleItem {
+                            item: ApiBundleItemDetail {
+                                item_type_id: ITEM_TYPE_BUDDY.to_string(),
+                                item_id: "buddy-uuid".to_string(),
+                            },
+                            base_price: 475,
+                            discount_percent: 0.30,
+                            discounted_price: 333,
                         },
                     ],
                     total_base_cost: Some(vp_cost_map(14025)),
@@ -308,12 +324,17 @@ mod tests {
         assert!((bundle.total_discount_percent - 37.1).abs() < 0.01);
         assert_eq!(bundle.bundle_remaining_secs, 259200);
 
-        // Only weapon skin should be present
-        assert_eq!(bundle.items.len(), 1);
-        assert_eq!(bundle.items[0].skin_uuid, "skin-uuid");
+        // All item types should be present
+        assert_eq!(bundle.items.len(), 3);
+        assert_eq!(bundle.items[0].item_uuid, "skin-uuid");
+        assert_eq!(bundle.items[0].item_type_id, ITEM_TYPE_SKIN);
         assert_eq!(bundle.items[0].base_cost, 2175);
         assert_eq!(bundle.items[0].discounted_cost, 1262);
         assert!((bundle.items[0].discount_percent - 42.0).abs() < 0.01);
+        assert_eq!(bundle.items[1].item_uuid, "spray-uuid");
+        assert_eq!(bundle.items[1].item_type_id, ITEM_TYPE_SPRAY);
+        assert_eq!(bundle.items[2].item_uuid, "buddy-uuid");
+        assert_eq!(bundle.items[2].item_type_id, ITEM_TYPE_BUDDY);
     }
 
     #[test]
