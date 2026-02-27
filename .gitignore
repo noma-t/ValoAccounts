@@ -41,3 +41,4 @@ src-tauri/[0-9]*/
 .claude/settings.local.json
 shopresult.example.json
 store.full.example.json
+storefront_debug.json
