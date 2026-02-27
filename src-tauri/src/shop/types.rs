@@ -31,15 +31,25 @@ pub struct NightMarketOffer {
     pub discount_percent: f64,
 }
 
-/// Individual skin item within a featured bundle.
+/// Individual item within a featured bundle.
 ///
+/// `item_type_id` identifies the cosmetic category (weapon skin, buddy, spray, etc.).
 /// `discount_percent` is stored as a percentage (0–100), matching `NightMarketOffer`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BundleItem {
-    pub skin_uuid: String,
+    // `skin_uuid` alias preserves compatibility with caches written before the rename.
+    #[serde(alias = "skin_uuid")]
+    pub item_uuid: String,
+    // Old cache entries pre-date this field; default to weapon skin so they still render.
+    #[serde(default = "default_skin_type_id")]
+    pub item_type_id: String,
     pub base_cost: u64,
     pub discounted_cost: u64,
     pub discount_percent: f64,
+}
+
+fn default_skin_type_id() -> String {
+    "e7c63390-eda7-46e0-bb7a-a6abdacd2433".to_string()
 }
 
 /// A featured bundle shown in the shop.

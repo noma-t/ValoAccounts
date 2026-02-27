@@ -533,6 +533,52 @@ fn get_skin_info_batch(level_uuids: Vec<String>) -> Result<Vec<Option<skins::Ski
 }
 
 #[tauri::command]
+fn get_buddy_info(level_uuid: String) -> Result<Option<skins::BuddyItem>, String> {
+    skins::get_buddy_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_buddy_info_batch(
+    level_uuids: Vec<String>,
+) -> Result<Vec<Option<skins::BuddyItem>>, String> {
+    skins::get_buddies_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_flex_info(uuid: String) -> Result<Option<skins::FlexItem>, String> {
+    skins::get_flex_by_uuid(&uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_flex_info_batch(uuids: Vec<String>) -> Result<Vec<Option<skins::FlexItem>>, String> {
+    skins::get_flex_by_uuids(&uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_playercard_info(uuid: String) -> Result<Option<skins::PlayercardItem>, String> {
+    skins::get_playercard_by_uuid(&uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_playercard_info_batch(
+    uuids: Vec<String>,
+) -> Result<Vec<Option<skins::PlayercardItem>>, String> {
+    skins::get_playercards_by_uuids(&uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_spray_info(level_uuid: String) -> Result<Option<skins::SprayItem>, String> {
+    skins::get_spray_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_spray_info_batch(
+    level_uuids: Vec<String>,
+) -> Result<Vec<Option<skins::SprayItem>>, String> {
+    skins::get_sprays_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn sync_skins() -> Result<bool, String> {
     skins::sync_skins_database()
         .await
@@ -646,6 +692,14 @@ pub fn run() {
             get_shop,
             get_skin_info,
             get_skin_info_batch,
+            get_buddy_info,
+            get_buddy_info_batch,
+            get_flex_info,
+            get_flex_info_batch,
+            get_playercard_info,
+            get_playercard_info_batch,
+            get_spray_info,
+            get_spray_info_batch,
             sync_skins,
             open_shop_window,
             is_demo_mode
