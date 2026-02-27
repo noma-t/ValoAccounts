@@ -12,7 +12,22 @@ use db::{
 };
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
+
+static DEMO_MODE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn is_demo_mode() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        DEMO_MODE.load(Ordering::Relaxed)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -518,10 +533,79 @@ fn get_skin_info_batch(level_uuids: Vec<String>) -> Result<Vec<Option<skins::Ski
 }
 
 #[tauri::command]
+fn get_buddy_info(level_uuid: String) -> Result<Option<skins::BuddyItem>, String> {
+    skins::get_buddy_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_buddy_info_batch(
+    level_uuids: Vec<String>,
+) -> Result<Vec<Option<skins::BuddyItem>>, String> {
+    skins::get_buddies_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_flex_info(uuid: String) -> Result<Option<skins::FlexItem>, String> {
+    skins::get_flex_by_uuid(&uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_flex_info_batch(uuids: Vec<String>) -> Result<Vec<Option<skins::FlexItem>>, String> {
+    skins::get_flex_by_uuids(&uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_playercard_info(uuid: String) -> Result<Option<skins::PlayercardItem>, String> {
+    skins::get_playercard_by_uuid(&uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_playercard_info_batch(
+    uuids: Vec<String>,
+) -> Result<Vec<Option<skins::PlayercardItem>>, String> {
+    skins::get_playercards_by_uuids(&uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_spray_info(level_uuid: String) -> Result<Option<skins::SprayItem>, String> {
+    skins::get_spray_by_level_uuid(&level_uuid).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_spray_info_batch(
+    level_uuids: Vec<String>,
+) -> Result<Vec<Option<skins::SprayItem>>, String> {
+    skins::get_sprays_by_level_uuids(&level_uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn sync_skins() -> Result<bool, String> {
     skins::sync_skins_database()
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn open_shop_window(app: tauri::AppHandle, account_id: i64, title: String) -> Result<(), String> {
+    let label = format!("shop-{}", account_id);
+
+    if let Some(existing) = app.get_webview_window(&label) {
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(std::path::PathBuf::from("/")),
+    )
+    .title(title)
+    .inner_size(1200.0, 650.0)
+    .min_inner_size(960.0, 600.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -550,6 +634,12 @@ pub fn run() {
         .init();
 
     log::info!("Starting valo-accounts application");
+
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|a| a == "--demo") {
+        DEMO_MODE.store(true, Ordering::Relaxed);
+        log::info!("Demo mode enabled");
+    }
 
     if let Err(e) = initialize_database(None) {
         log::error!("Failed to initialize database: {}", e);
@@ -602,7 +692,17 @@ pub fn run() {
             get_shop,
             get_skin_info,
             get_skin_info_batch,
-            sync_skins
+            get_buddy_info,
+            get_buddy_info_batch,
+            get_flex_info,
+            get_flex_info_batch,
+            get_playercard_info,
+            get_playercard_info_batch,
+            get_spray_info,
+            get_spray_info_batch,
+            sync_skins,
+            open_shop_window,
+            is_demo_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
