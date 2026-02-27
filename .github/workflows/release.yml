@@ -51,8 +51,11 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           $zipName = "valo-accounts-${version}-windows.zip"
+          $exeName = "valo-accounts-${version}-windows.exe"
           Compress-Archive -Path "src-tauri\target\release\valo-accounts.exe" -DestinationPath $zipName
+          Copy-Item "src-tauri\target\release\valo-accounts.exe" -Destination $exeName
           "zip_name=$zipName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "exe_name=$exeName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Generate release notes
         shell: pwsh
@@ -132,6 +135,8 @@ jobs:
           draft: true
           name: ${{ github.ref_name }}
           body_path: release_notes.md
-          files: ${{ steps.archive.outputs.zip_name }}
+          files: |
+            ${{ steps.archive.outputs.zip_name }}
+            ${{ steps.archive.outputs.exe_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
