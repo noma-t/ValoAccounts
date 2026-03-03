@@ -496,17 +496,25 @@ fn save_account_cookies(account_id: i64, cookies: &shop::RiotCookies) -> Result<
     Ok(())
 }
 
-/// Fetch the daily shop and night market, returning a cached result when valid.
+/// Fetch the daily shop and night market.
+///
+/// When `force` is `false` a valid cached result is returned without hitting
+/// the API.  When `force` is `true` the cache is bypassed and the API is
+/// always called (used by the manual refresh button).
 #[tauri::command]
-async fn get_shop(account_id: i64, cookies: shop::RiotCookies) -> Result<shop::Storefront, String> {
-    log::debug!("get_shop: called for account {}", account_id);
+async fn get_shop(account_id: i64, cookies: shop::RiotCookies, force: bool) -> Result<shop::Storefront, String> {
+    log::debug!("get_shop: called for account {} (force={})", account_id, force);
 
-    if let Some(cached) = shop::load_cached_storefront(account_id) {
-        log::debug!("get_shop: returning cached storefront for account {}", account_id);
-        return Ok(cached);
+    if !force {
+        if let Some(cached) = shop::load_cached_storefront(account_id) {
+            log::debug!("get_shop: returning cached storefront for account {}", account_id);
+            return Ok(cached);
+        }
+    } else {
+        log::debug!("get_shop: force refresh, skipping cache for account {}", account_id);
     }
 
-    log::debug!("get_shop: no cache, fetching storefront for account {}", account_id);
+    log::debug!("get_shop: fetching storefront for account {}", account_id);
     let (storefront, updated_cookies) = shop::fetch_storefront(cookies)
         .await
         .map_err(|e| e.to_string())?;
