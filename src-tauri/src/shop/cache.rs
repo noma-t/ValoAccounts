@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use super::types::{Bundle, BundleItem, DailyOffer, NightMarketOffer, Storefront};
+use super::types::{AccessoryOffer, Bundle, BundleItem, DailyOffer, NightMarketOffer, Storefront};
 
 /// Internal representation used for bundle cache serialization.
 ///
@@ -37,17 +37,18 @@ pub fn load_cached_storefront(account_id: i64) -> Option<Storefront> {
         }
     };
 
-    let row: Option<(String, Option<String>, Option<String>, i64, Option<i64>)> = conn
+    let row: Option<(String, Option<String>, Option<String>, Option<String>, i64, Option<i64>, Option<i64>)> = conn
         .query_row(
-            "SELECT daily_offers_json, night_market_json, bundles_json, expires_at, nm_expires_at
+            "SELECT daily_offers_json, night_market_json, bundles_json, accessories_json,
+                    expires_at, nm_expires_at, acc_expires_at
                FROM storefront_cache
               WHERE account_id = ?1",
             [account_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         )
         .ok();
 
-    let (daily_json, night_json, bundles_json, expires_at, nm_expires_at) = match row {
+    let (daily_json, night_json, bundles_json, accessories_json, expires_at, nm_expires_at, acc_expires_at) = match row {
         Some(r) => r,
         None => {
             log::info!("Cache: miss (no entry) for account {}", account_id);
@@ -86,6 +87,23 @@ pub fn load_cached_storefront(account_id: i64) -> Option<Storefront> {
         .filter(|&ea| ea > now)
         .map(|ea| (ea - now) as u64);
 
+    let accessories_remaining_secs = acc_expires_at
+        .filter(|&ea| ea > now)
+        .map(|ea| (ea - now) as u64);
+
+    let accessories: Option<Vec<AccessoryOffer>> = match accessories_json {
+        Some(ref json) => match serde_json::from_str(json) {
+            Ok(v) => {
+                if accessories_remaining_secs.is_some() { Some(v) } else { None }
+            }
+            Err(e) => {
+                log::warn!("Cache: failed to deserialize accessories: {}", e);
+                None
+            }
+        },
+        None => None,
+    };
+
     let bundles: Option<Vec<Bundle>> = match bundles_json {
         Some(ref json) => match serde_json::from_str::<Vec<CachedBundle>>(json) {
             Ok(cached_bundles) => {
@@ -112,16 +130,19 @@ pub fn load_cached_storefront(account_id: i64) -> Option<Storefront> {
     };
 
     log::info!(
-        "Cache: hit for account {} ({} secs remaining, {} bundles)",
+        "Cache: hit for account {} ({} secs remaining, {} bundles, {} accessories)",
         account_id,
         remaining,
         bundles.as_ref().map_or(0, |v| v.len()),
+        accessories.as_ref().map_or(0, |v| v.len()),
     );
 
     Some(Storefront {
         daily_offers,
         daily_remaining_secs: remaining,
         bundles,
+        accessories,
+        accessories_remaining_secs,
         night_market,
         night_market_remaining_secs,
     })
@@ -158,6 +179,15 @@ pub fn save_storefront_cache(account_id: i64, storefront: &Storefront) {
     let nm_expires_at: Option<i64> = storefront
         .night_market_remaining_secs
         .map(|secs| now + secs as i64);
+    let acc_expires_at: Option<i64> = storefront
+        .accessories_remaining_secs
+        .map(|secs| now + secs as i64);
+
+    let accessories_json: Option<String> = storefront.accessories.as_ref().and_then(|acc| {
+        serde_json::to_string(acc)
+            .map_err(|e| log::warn!("Cache: failed to serialize accessories: {}", e))
+            .ok()
+    });
 
     let bundles_json: Option<String> = storefront.bundles.as_ref().and_then(|bundles| {
         let cached: Vec<CachedBundle> = bundles
@@ -178,16 +208,19 @@ pub fn save_storefront_cache(account_id: i64, storefront: &Storefront) {
 
     let result = conn.execute(
         "INSERT INTO storefront_cache
-             (account_id, daily_offers_json, night_market_json, bundles_json, expires_at, nm_expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             (account_id, daily_offers_json, night_market_json, bundles_json, accessories_json,
+              expires_at, nm_expires_at, acc_expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(account_id) DO UPDATE SET
              daily_offers_json = excluded.daily_offers_json,
              night_market_json = excluded.night_market_json,
              bundles_json = excluded.bundles_json,
+             accessories_json = excluded.accessories_json,
              expires_at = excluded.expires_at,
              nm_expires_at = excluded.nm_expires_at,
+             acc_expires_at = excluded.acc_expires_at,
              cached_at = CURRENT_TIMESTAMP",
-        rusqlite::params![account_id, daily_json, night_json, bundles_json, expires_at, nm_expires_at],
+        rusqlite::params![account_id, daily_json, night_json, bundles_json, accessories_json, expires_at, nm_expires_at, acc_expires_at],
     );
 
     match result {
