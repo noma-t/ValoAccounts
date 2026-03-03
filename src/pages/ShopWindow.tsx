@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   getAccountCookies,
@@ -9,6 +9,8 @@ import {
   getSprayInfoBatch,
   getFlexInfoBatch,
   isDemoMode,
+  getRiotClientStatus,
+  getValorantStatus,
   ITEM_TYPE_SKIN,
   ITEM_TYPE_BUDDY,
   ITEM_TYPE_PLAYERCARD,
@@ -186,9 +188,12 @@ const MOCK_STOREFRONT: Storefront = {
 interface SectionHeaderProps {
   label: string
   countdown?: number | null
+  onRefresh?: () => void
+  refreshDisabled?: boolean
+  refreshing?: boolean
 }
 
-function SectionHeader({ label, countdown }: SectionHeaderProps) {
+function SectionHeader({ label, countdown, onRefresh, refreshDisabled, refreshing }: SectionHeaderProps) {
   return (
     <div className="flex items-center gap-3 mb-3">
       <span className="text-xs font-bold uppercase tracking-widest text-neutral-300 shrink-0">
@@ -200,6 +205,20 @@ function SectionHeader({ label, countdown }: SectionHeaderProps) {
         </span>
       )}
       <div className="flex-1 h-px bg-neutral-700/60" />
+      {onRefresh !== undefined && (
+        <button
+          onClick={onRefresh}
+          disabled={refreshDisabled}
+          className="shrink-0 cursor-pointer rounded p-1 text-neutral-400 hover:text-white hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          title={refreshDisabled ? 'RiotClient or Valorant is running' : 'Refresh shop'}
+        >
+          <img
+            src="/refresh-icon.svg"
+            alt="Refresh"
+            className={`w-3.5 h-3.5${refreshing ? ' animate-spin' : ''}`}
+          />
+        </button>
+      )}
     </div>
   )
 }
@@ -349,7 +368,9 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
   const [skinMap, setSkinMap] = useState<Record<string, SkinWeapon | null>>({})
   const [itemMap, setItemMap] = useState<Record<string, ItemInfo | null>>({})
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isProcessRunning, setIsProcessRunning] = useState(false)
 
   const dailyRemaining = useCountdown(storefront?.daily_remaining_secs ?? null)
   const nightmarketRemaining = useCountdown(storefront?.night_market_remaining_secs ?? null)
@@ -362,7 +383,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  useEffect(() => {
+  const fetchShop = useCallback((force = false) => {
     isDemoMode().then((isDemo) => {
       if (isDemo) {
         setStorefront(MOCK_STOREFRONT)
@@ -370,7 +391,13 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
         return
       }
 
-      setLoading(true)
+      if (force) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+        setStorefront(null)
+      }
+      setError(null)
 
       getAccountCookies(accountId)
         .then(async (cookies) => {
@@ -379,7 +406,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
             return
           }
 
-          const sf = await getShop(accountId, cookies)
+          const sf = await getShop(accountId, cookies, force)
           setStorefront(sf)
 
           // Skin UUIDs: daily offers, night market, and bundle skin items
@@ -448,9 +475,30 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
           setItemMap(newItemMap)
         })
         .catch((e) => setError(String(e)))
-        .finally(() => setLoading(false))
+        .finally(() => {
+          setLoading(false)
+          setRefreshing(false)
+        })
     })
   }, [accountId])
+
+  useEffect(() => {
+    fetchShop()
+  }, [fetchShop])
+
+  useEffect(() => {
+    const checkProcesses = () => {
+      Promise.all([getRiotClientStatus(), getValorantStatus()])
+        .then(([riotRunning, valoRunning]) => {
+          setIsProcessRunning(riotRunning || valoRunning)
+        })
+        .catch(() => setIsProcessRunning(false))
+    }
+
+    checkProcesses()
+    const interval = setInterval(checkProcesses, 3000)
+    return () => clearInterval(interval)
+  }, [])
 
   const bundles = storefront?.bundles ?? []
   const nightMarket = storefront?.night_market ?? null
@@ -468,7 +516,13 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
           <div className="flex flex-col gap-8">
 
             <section>
-              <SectionHeader label="Daily" countdown={dailyRemaining} />
+              <SectionHeader
+                label="Daily"
+                countdown={dailyRemaining}
+                onRefresh={() => fetchShop(true)}
+                refreshDisabled={refreshing || loading || isProcessRunning}
+                refreshing={refreshing}
+              />
               <div className="grid grid-cols-4 gap-4">
                 {storefront.daily_offers.map((offer) => {
                   const skin = skinMap[offer.skin_uuid] ?? null
