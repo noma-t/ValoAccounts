@@ -6,8 +6,8 @@ use rusqlite::{Connection, OptionalExtension};
 use super::error::SkinsError;
 use super::models::{
     BuddyApiEntry, BuddyItem, BuddyLevelApiEntry, ChromaApiEntry, ContentTierApiEntry,
-    FlexApiEntry, FlexItem, LevelApiEntry, PlayercardApiEntry, PlayercardItem, SkinApiEntry,
-    SkinWeapon, SprayApiEntry, SprayItem, SprayLevelApiEntry,
+    FlexApiEntry, FlexItem, LevelApiEntry, PlayercardApiEntry, PlayercardItem, PlayerTitleApiEntry,
+    SkinApiEntry, SkinWeapon, SprayApiEntry, SprayItem, SprayLevelApiEntry, TitleItem,
 };
 
 const SCHEMA_SQL: &str = include_str!("schema.sql");
@@ -64,6 +64,7 @@ pub(super) struct TableStatus {
     pub flex_empty: bool,
     pub playercards_empty: bool,
     pub sprays_empty: bool,
+    pub titles_empty: bool,
 }
 
 impl TableStatus {
@@ -73,6 +74,7 @@ impl TableStatus {
             || self.flex_empty
             || self.playercards_empty
             || self.sprays_empty
+            || self.titles_empty
     }
 }
 
@@ -95,6 +97,7 @@ pub(super) fn get_table_status() -> Result<TableStatus, SkinsError> {
         flex_empty: is_table_empty(&conn, "flex")?,
         playercards_empty: is_table_empty(&conn, "playercards")?,
         sprays_empty: is_table_empty(&conn, "sprays")?,
+        titles_empty: is_table_empty(&conn, "player_titles").unwrap_or(true),
     })
 }
 
@@ -593,6 +596,58 @@ pub fn get_sprays_by_level_uuids(
         .iter()
         .map(|uuid| {
             stmt.query_row([uuid.as_str()], map_spray_item_row)
+                .optional()
+                .map_err(SkinsError::from)
+        })
+        .collect()
+}
+
+// -- Player Titles ------------------------------------------------------------
+
+pub(super) fn insert_titles(titles: &[PlayerTitleApiEntry]) -> Result<(), SkinsError> {
+    let conn = get_connection()?;
+    let mut stmt = conn
+        .prepare(
+            "INSERT OR REPLACE INTO player_titles (uuid, displayName, titleText, assetPath) \
+             VALUES (?1, ?2, ?3, ?4)",
+        )
+        .map_err(SkinsError::from)?;
+
+    for title in titles {
+        stmt.execute((
+            &title.uuid,
+            title.display_name.as_deref().unwrap_or(""),
+            &title.title_text,
+            &title.asset_path,
+        ))
+        .map_err(SkinsError::from)?;
+    }
+
+    Ok(())
+}
+
+fn map_title_item_row(row: &rusqlite::Row) -> rusqlite::Result<TitleItem> {
+    Ok(TitleItem {
+        uuid: row.get(0)?,
+        display_name: row.get(1)?,
+        title_text: row.get(2)?,
+        asset_path: row.get(3)?,
+    })
+}
+
+const TITLE_LOOKUP_SQL: &str =
+    "SELECT uuid, displayName, titleText, assetPath FROM player_titles WHERE uuid = ?1";
+
+pub fn get_titles_by_uuids(uuids: &[String]) -> Result<Vec<Option<TitleItem>>, SkinsError> {
+    let conn = get_connection()?;
+    let mut stmt = conn
+        .prepare(TITLE_LOOKUP_SQL)
+        .map_err(SkinsError::from)?;
+
+    uuids
+        .iter()
+        .map(|uuid| {
+            stmt.query_row([uuid.as_str()], map_title_item_row)
                 .optional()
                 .map_err(SkinsError::from)
         })

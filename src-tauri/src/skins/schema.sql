@@ -98,3 +98,10 @@ CREATE TABLE IF NOT EXISTS spray_levels (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spray_levels_spray ON spray_levels(sprayUuid);
+
+CREATE TABLE IF NOT EXISTS player_titles (
+    uuid TEXT PRIMARY KEY,
+    displayName TEXT NOT NULL,
+    titleText TEXT,
+    assetPath TEXT
+);

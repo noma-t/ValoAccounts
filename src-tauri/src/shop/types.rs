@@ -66,10 +66,21 @@ pub struct Bundle {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessoryOffer {
+    pub item_uuid: String,
+    pub item_type_id: String,
+    pub kc_cost: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Storefront {
     pub daily_offers: Vec<DailyOffer>,
     pub daily_remaining_secs: u64,
     pub bundles: Option<Vec<Bundle>>,
+    #[serde(default)]
+    pub accessories: Option<Vec<AccessoryOffer>>,
+    #[serde(default)]
+    pub accessories_remaining_secs: Option<u64>,
     pub night_market: Option<Vec<NightMarketOffer>>,
     pub night_market_remaining_secs: Option<u64>,
 }
@@ -84,6 +95,8 @@ pub(super) struct ApiStorefront {
     pub(super) bonus_store: Option<BonusStoreData>,
     #[serde(rename = "FeaturedBundle")]
     pub(super) featured_bundle: Option<FeaturedBundleWrapper>,
+    #[serde(rename = "AccessoryStore")]
+    pub(super) accessory_store: Option<ApiAccessoryStore>,
 }
 
 #[derive(Deserialize)]
@@ -175,6 +188,36 @@ pub(super) struct BonusOffer {
     pub(super) offer_id: String,
     #[serde(rename = "Cost")]
     pub(super) cost: HashMap<String, u64>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiAccessoryStore {
+    #[serde(rename = "AccessoryStoreOffers")]
+    pub(super) offers: Vec<ApiAccessoryStoreOffer>,
+    #[serde(rename = "AccessoryStoreRemainingDurationInSeconds")]
+    pub(super) remaining_duration_secs: u64,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiAccessoryStoreOffer {
+    #[serde(rename = "Offer")]
+    pub(super) offer: ApiAccessoryOfferDetail,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiAccessoryOfferDetail {
+    #[serde(rename = "Cost")]
+    pub(super) cost: HashMap<String, u64>,
+    #[serde(rename = "Rewards")]
+    pub(super) rewards: Vec<ApiAccessoryReward>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ApiAccessoryReward {
+    #[serde(rename = "ItemTypeID")]
+    pub(super) item_type_id: String,
+    #[serde(rename = "ItemID")]
+    pub(super) item_id: String,
 }
 
 #[derive(Deserialize)]

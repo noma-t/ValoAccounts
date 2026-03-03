@@ -142,6 +142,24 @@ pub(super) struct PlayercardApiEntry {
     pub(super) asset_path: Option<String>,
 }
 
+// -- Player Titles API types --------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct PlayerTitlesApiResponse {
+    pub(super) data: Vec<PlayerTitleApiEntry>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PlayerTitleApiEntry {
+    pub(super) uuid: String,
+    #[serde(rename = "displayName")]
+    pub(super) display_name: Option<String>,
+    #[serde(rename = "titleText")]
+    pub(super) title_text: Option<String>,
+    #[serde(rename = "assetPath")]
+    pub(super) asset_path: Option<String>,
+}
+
 // -- Sprays API types ---------------------------------------------------------
 
 #[derive(Deserialize)]
@@ -230,4 +248,12 @@ pub struct SprayItem {
     pub asset_path: Option<String>,
     pub level_uuid: String,
     pub spray_level: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TitleItem {
+    pub uuid: String,
+    pub display_name: String,
+    pub title_text: Option<String>,
+    pub asset_path: Option<String>,
 }

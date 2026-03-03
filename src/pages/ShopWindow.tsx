@@ -8,11 +8,13 @@ import {
   getPlayercardInfoBatch,
   getSprayInfoBatch,
   getFlexInfoBatch,
+  getTitleInfoBatch,
   isDemoMode,
   ITEM_TYPE_SKIN,
   ITEM_TYPE_BUDDY,
   ITEM_TYPE_PLAYERCARD,
   ITEM_TYPE_SPRAY,
+  ITEM_TYPE_TITLE,
 } from '../lib/tauri'
 import type {
   Storefront,
@@ -21,9 +23,11 @@ import type {
   PlayercardItem,
   SprayItem,
   FlexItem,
+  TitleItem,
   DailyOffer,
   NightMarketOffer,
   Bundle,
+  AccessoryOffer,
 } from '../lib/tauri'
 import '../App.css'
 
@@ -94,6 +98,7 @@ type ItemInfo =
   | { kind: 'playercard'; data: PlayercardItem }
   | { kind: 'spray'; data: SprayItem }
   | { kind: 'flex'; data: FlexItem }
+  | { kind: 'title'; data: TitleItem }
 
 function skinImageUrl(skin: SkinWeapon | null, levelUuid: string): string {
   if (skin?.display_icon) return skin.display_icon
@@ -129,6 +134,15 @@ const MOCK_SKIN_MAP: Record<string, SkinWeapon> = {
   'mock-nm-4': { uuid: 'mock-nm-4', display_name: 'Glitchpop Frenzy', display_icon: null, tier_color: 'FF00FF', tier_uuid: null, tier_rank: null, tier_icon: null },
   'mock-nm-5': { uuid: 'mock-nm-5', display_name: 'Reaver Sheriff', display_icon: null, tier_color: 'E74C3C', tier_uuid: null, tier_rank: null, tier_icon: null },
   'mock-nm-6': { uuid: 'mock-nm-6', display_name: 'Origin Guardian', display_icon: null, tier_color: '7B68EE', tier_uuid: null, tier_rank: null, tier_icon: null },
+}
+
+const MOCK_ITEM_MAP: Record<string, ItemInfo | null> = {
+  'mock-acc-spray-1': { kind: 'spray', data: { uuid: 'mock-acc-spray-1', display_name: 'DEMO Spray 1', display_icon: null, full_transparent_icon: null, animation_gif: null, asset_path: null, level_uuid: 'mock-acc-spray-1', spray_level: null } },
+  'mock-acc-spray-2': { kind: 'spray', data: { uuid: 'mock-acc-spray-2', display_name: 'DEMO Spray 2', display_icon: null, full_transparent_icon: null, animation_gif: null, asset_path: null, level_uuid: 'mock-acc-spray-2', spray_level: null } },
+  'mock-acc-buddy-1': { kind: 'buddy', data: { uuid: 'mock-acc-buddy-1', display_name: 'DEMO Buddy 1', display_icon: null, asset_path: null, level_uuid: 'mock-acc-buddy-1', charm_level: null } },
+  'mock-acc-buddy-2': { kind: 'buddy', data: { uuid: 'mock-acc-buddy-2', display_name: 'DEMO Buddy 2', display_icon: null, asset_path: null, level_uuid: 'mock-acc-buddy-2', charm_level: null } },
+  'mock-acc-card-1': { kind: 'playercard', data: { uuid: 'mock-acc-card-1', display_name: 'DEMO Player Card', display_icon: null, small_art: null, wide_art: null, large_art: null, asset_path: null } },
+  'mock-acc-title-1': { kind: 'title', data: { uuid: 'mock-acc-title-1', display_name: 'DEMO Title', title_text: 'The Demo', asset_path: null } },
 }
 
 const MOCK_STOREFRONT: Storefront = {
@@ -170,6 +184,15 @@ const MOCK_STOREFRONT: Storefront = {
     { skin_uuid: 'mock-d', vp_cost: 1275 },
   ],
   daily_remaining_secs: 3600 * 8,
+  accessories: [
+    { item_uuid: 'mock-acc-spray-1', item_type_id: ITEM_TYPE_SPRAY, kc_cost: 375 },
+    { item_uuid: 'mock-acc-spray-2', item_type_id: ITEM_TYPE_SPRAY, kc_cost: 375 },
+    { item_uuid: 'mock-acc-buddy-1', item_type_id: ITEM_TYPE_BUDDY, kc_cost: 400 },
+    { item_uuid: 'mock-acc-buddy-2', item_type_id: ITEM_TYPE_BUDDY, kc_cost: 400 },
+    { item_uuid: 'mock-acc-card-1', item_type_id: ITEM_TYPE_PLAYERCARD, kc_cost: 500 },
+    { item_uuid: 'mock-acc-title-1', item_type_id: ITEM_TYPE_TITLE, kc_cost: 500 },
+  ],
+  accessories_remaining_secs: 3600 * 24 * 3,
   night_market: [
     { skin_uuid: 'mock-nm-1', base_cost: 2175, discount_cost: 870, discount_percent: 60 },
     { skin_uuid: 'mock-nm-2', base_cost: 2175, discount_cost: 1305, discount_percent: 40 },
@@ -300,40 +323,54 @@ function BonusItemCard({ item, info }: BonusItemCardProps) {
     icon = info.data.display_icon
     name = info.data.display_name
     label = 'Title'
+  } else if (info?.kind === 'title') {
+    icon = '/valo-icon.svg'
+    name = info.data.display_name
+    label = 'Title'
   }
 
   return (
-    <div className="w-[120px] h-[155px] shrink-0 rounded overflow-hidden bg-neutral-800/60 flex flex-col">
-      <div className="flex-1 min-h-0 relative">
-        {icon ? (
-          <img
-            src={icon}
-            alt={name ?? ''}
-            className="absolute inset-0 w-full h-full object-contain p-3"
-            loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-          />
-        ) : (
-          <div className="absolute inset-3 rounded bg-neutral-700/50" />
+    <div className="w-[276px] h-[155px] shrink-0 rounded overflow-hidden bg-neutral-800/60 relative">
+      {/* Image */}
+      {icon ? (
+        <img
+          src={icon}
+          alt={name ?? ''}
+          className="absolute inset-0 w-full h-full object-contain p-3 pb-10"
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      ) : (
+        <div className="absolute inset-3 rounded bg-neutral-700/50" />
+      )}
+
+      {/* Price — top right */}
+      <div className="absolute top-2 right-2 flex flex-col items-end gap-0.5">
+        {item.base_cost !== item.discounted_cost && (
+          <div className="flex items-center gap-1 leading-none">
+            <span className="text-xs text-white/40 line-through tabular-nums">
+              {formatVp(item.base_cost)}
+            </span>
+            <span className="text-xs font-semibold text-green-400 leading-none">
+              -{Math.round(item.discount_percent)}%
+            </span>
+          </div>
         )}
+        <div className="flex items-baseline gap-0.5 text-sm text-white leading-none">
+          <VpIcon />
+          <span className="tabular-nums">{formatVp(item.discounted_cost)}</span>
+        </div>
       </div>
-      <div className="px-2 pb-2 shrink-0">
+
+      {/* Label + Name — bottom left */}
+      <div className="absolute bottom-0 left-0 right-0 px-2 pb-2">
         {label && (
-          <div className="text-[10px] text-neutral-400 uppercase tracking-wider leading-none mb-1">
+          <div className="text-xs text-neutral-400 uppercase tracking-wider leading-none mb-0.5">
             {label}
           </div>
         )}
-        <div className="text-xs font-medium text-white truncate leading-tight mb-1">
+        <div className="text-sm font-medium text-white truncate leading-tight">
           {name ?? item.item_uuid}
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-white/35 line-through tabular-nums">
-            {formatVp(item.base_cost)}
-          </span>
-          <div className="flex items-center gap-0.5 text-xs text-white/70">
-            <VpIcon />
-            <span className="tabular-nums">{formatVp(item.discounted_cost)}</span>
-          </div>
         </div>
       </div>
     </div>
@@ -352,6 +389,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
   const [error, setError] = useState<string | null>(null)
 
   const dailyRemaining = useCountdown(storefront?.daily_remaining_secs ?? null)
+  const accessoriesRemaining = useCountdown(storefront?.accessories_remaining_secs ?? null)
   const nightmarketRemaining = useCountdown(storefront?.night_market_remaining_secs ?? null)
 
   useEffect(() => {
@@ -367,6 +405,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
       if (isDemo) {
         setStorefront(MOCK_STOREFRONT)
         setSkinMap(MOCK_SKIN_MAP)
+        setItemMap(MOCK_ITEM_MAP)
         return
       }
 
@@ -399,12 +438,19 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
             .filter((i) => i.item_type_id !== ITEM_TYPE_SKIN)
             .map((i) => i.item_uuid)
 
+          // Accessories also need item info resolved from the same DB tables.
+          const accessoryUuids = (sf.accessories ?? []).map((a) => a.item_uuid)
+
+          // Merge and deduplicate all bonus-type UUIDs to minimize DB round-trips.
+          const allBonusUuids = [...new Set([...bonusBundleUuids, ...accessoryUuids])]
+
           const fetches = await Promise.allSettled([
             skinUuids.length > 0 ? getSkinInfoBatch(skinUuids) : Promise.resolve([]),
-            bonusBundleUuids.length > 0 ? getBuddyInfoBatch(bonusBundleUuids) : Promise.resolve([]),
-            bonusBundleUuids.length > 0 ? getPlayercardInfoBatch(bonusBundleUuids) : Promise.resolve([]),
-            bonusBundleUuids.length > 0 ? getSprayInfoBatch(bonusBundleUuids) : Promise.resolve([]),
-            bonusBundleUuids.length > 0 ? getFlexInfoBatch(bonusBundleUuids) : Promise.resolve([]),
+            allBonusUuids.length > 0 ? getBuddyInfoBatch(allBonusUuids) : Promise.resolve([]),
+            allBonusUuids.length > 0 ? getPlayercardInfoBatch(allBonusUuids) : Promise.resolve([]),
+            allBonusUuids.length > 0 ? getSprayInfoBatch(allBonusUuids) : Promise.resolve([]),
+            allBonusUuids.length > 0 ? getFlexInfoBatch(allBonusUuids) : Promise.resolve([]),
+            allBonusUuids.length > 0 ? getTitleInfoBatch(allBonusUuids) : Promise.resolve([]),
           ])
 
           const newSkinMap: Record<string, SkinWeapon | null> = {}
@@ -421,26 +467,31 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
 
           const buddyResults = fetches[1].status === 'fulfilled'
             ? fetches[1].value as (BuddyItem | null)[]
-            : new Array<BuddyItem | null>(bonusBundleUuids.length).fill(null)
+            : new Array<BuddyItem | null>(allBonusUuids.length).fill(null)
           const cardResults = fetches[2].status === 'fulfilled'
             ? fetches[2].value as (PlayercardItem | null)[]
-            : new Array<PlayercardItem | null>(bonusBundleUuids.length).fill(null)
+            : new Array<PlayercardItem | null>(allBonusUuids.length).fill(null)
           const sprayResults = fetches[3].status === 'fulfilled'
             ? fetches[3].value as (SprayItem | null)[]
-            : new Array<SprayItem | null>(bonusBundleUuids.length).fill(null)
+            : new Array<SprayItem | null>(allBonusUuids.length).fill(null)
           const flexResults = fetches[4].status === 'fulfilled'
             ? fetches[4].value as (FlexItem | null)[]
-            : new Array<FlexItem | null>(bonusBundleUuids.length).fill(null)
+            : new Array<FlexItem | null>(allBonusUuids.length).fill(null)
+          const titleResults = fetches[5].status === 'fulfilled'
+            ? fetches[5].value as (TitleItem | null)[]
+            : new Array<TitleItem | null>(allBonusUuids.length).fill(null)
 
-          bonusBundleUuids.forEach((uuid, i) => {
+          allBonusUuids.forEach((uuid, i) => {
             const buddy = buddyResults[i]
             const card = cardResults[i]
             const spray = sprayResults[i]
             const flex = flexResults[i]
+            const title = titleResults[i]
             if (buddy) newItemMap[uuid] = { kind: 'buddy', data: buddy }
             else if (card) newItemMap[uuid] = { kind: 'playercard', data: card }
             else if (spray) newItemMap[uuid] = { kind: 'spray', data: spray }
             else if (flex) newItemMap[uuid] = { kind: 'flex', data: flex }
+            else if (title) newItemMap[uuid] = { kind: 'title', data: title }
             else newItemMap[uuid] = null
           })
 
@@ -453,6 +504,7 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
   }, [accountId])
 
   const bundles = storefront?.bundles ?? []
+  const accessories = storefront?.accessories ?? null
   const nightMarket = storefront?.night_market ?? null
 
   return (
@@ -484,6 +536,21 @@ export function ShopWindow({ accountId }: ShopWindowProps) {
                 <div className="flex flex-col gap-6">
                   {bundles.map((bundle, i) => (
                     <BundleGroup key={i} bundle={bundle} itemMap={itemMap} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {accessories && accessories.length > 0 && (
+              <section>
+                <SectionHeader label="Accessories" countdown={accessoriesRemaining} />
+                <div className="grid grid-cols-4 gap-4">
+                  {accessories.map((offer) => (
+                    <AccessoryItemCard
+                      key={offer.item_uuid}
+                      offer={offer}
+                      info={itemMap[offer.item_uuid] ?? null}
+                    />
                   ))}
                 </div>
               </section>
@@ -560,6 +627,79 @@ function NightMarketCard({ skin, offer, hex }: NightMarketCardProps) {
         {skin?.tier_icon && (
           <img src={skin.tier_icon} alt="" className="w-4 h-4 shrink-0 opacity-80" />
         )}
+      </div>
+    </div>
+  )
+}
+
+interface AccessoryItemCardProps {
+  offer: AccessoryOffer
+  info: ItemInfo | null
+}
+
+function AccessoryItemCard({ offer, info }: AccessoryItemCardProps) {
+  let icon: string | null = null
+  let name: string | null = null
+  let label: string | null = null
+  let titleText: string | null = null
+
+  if (info?.kind === 'buddy') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Buddy'
+  } else if (info?.kind === 'spray') {
+    icon = info.data.full_transparent_icon ?? info.data.display_icon
+    name = info.data.display_name
+    label = 'Spray'
+  } else if (info?.kind === 'playercard') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Card'
+  } else if (info?.kind === 'flex') {
+    icon = info.data.display_icon
+    name = info.data.display_name
+    label = 'Title'
+  } else if (info?.kind === 'title') {
+    name = info.data.display_name
+    titleText = info.data.title_text ?? null
+    label = 'Title'
+  }
+
+  return (
+    <div className="rounded overflow-hidden bg-neutral-800/60 relative h-[155px]">
+      {/* Image */}
+      {titleText !== null ? (
+        <div className="absolute inset-0 bottom-10 flex items-center justify-center">
+          <img src="/valo-icon.svg" alt="" className="w-14 h-14 shrink-0 mt-6" />
+        </div>
+      ) : icon ? (
+        <img
+          src={icon}
+          alt={name ?? ''}
+          className="absolute inset-0 w-full h-full object-contain p-3 pb-10"
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      ) : (
+        <div className="absolute inset-3 rounded bg-neutral-700/50" />
+      )}
+
+      {/* Price — top right */}
+      <div className="absolute top-2 right-2 flex items-baseline gap-0.5 text-sm text-green-300 leading-none">
+        <span className="text-sm font-bold text-green-400">K</span>
+        <span className="tabular-nums">{formatVp(offer.kc_cost)}</span>
+      </div>
+
+      {/* Label + Name — bottom left */}
+      <div className="absolute bottom-0 left-0 right-0 px-2 pb-2">
+        {label && (
+          <div className="text-xs text-neutral-400 uppercase tracking-wider leading-none mb-0.5">
+            {label}
+          </div>
+        )}
+        <div className="text-sm font-medium text-white truncate leading-tight">
+          {name ?? offer.item_uuid}
+        </div>
       </div>
     </div>
   )
