@@ -136,8 +136,8 @@ export interface Storefront {
   night_market_remaining_secs: number | null
 }
 
-export async function getShop(accountId: number, cookies: RiotCookies): Promise<Storefront> {
-  return invoke('get_shop', { accountId, cookies })
+export async function getShop(accountId: number, cookies: RiotCookies, force = false): Promise<Storefront> {
+  return invoke('get_shop', { accountId, cookies, force })
 }
 
 export interface SkinWeapon {
