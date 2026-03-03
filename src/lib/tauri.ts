@@ -108,6 +108,7 @@ export const ITEM_TYPE_BUDDY = 'dd3bf334-87f3-40bd-b043-682a57a8dc3a'
 export const ITEM_TYPE_PLAYERCARD = '3f296c07-64c3-494c-923b-fe692a4fa1bd'
 export const ITEM_TYPE_SPRAY = 'd5f120f8-ff8c-4aac-92ea-f2b5acbe9475'
 export const ITEM_TYPE_FLEX = 'de7caa6b-adf7-4588-aaab-3d6081856915'
+export const ITEM_TYPE_TITLE = 'de7caa6b-adf7-4588-bbd1-143831e786c6'
 
 export interface Bundle {
   name: string
@@ -119,10 +120,18 @@ export interface Bundle {
   items: BundleItem[]
 }
 
+export interface AccessoryOffer {
+  item_uuid: string
+  item_type_id: string
+  kc_cost: number
+}
+
 export interface Storefront {
   bundles?: Bundle[]
   daily_offers: DailyOffer[]
   daily_remaining_secs: number
+  accessories: AccessoryOffer[] | null
+  accessories_remaining_secs: number | null
   night_market: NightMarketOffer[] | null
   night_market_remaining_secs: number | null
 }
@@ -200,6 +209,17 @@ export interface FlexItem {
 
 export async function getFlexInfoBatch(uuids: string[]): Promise<(FlexItem | null)[]> {
   return invoke('get_flex_info_batch', { uuids })
+}
+
+export interface TitleItem {
+  uuid: string
+  display_name: string
+  title_text: string | null
+  asset_path: string | null
+}
+
+export async function getTitleInfoBatch(uuids: string[]): Promise<(TitleItem | null)[]> {
+  return invoke('get_title_info_batch', { uuids })
 }
 
 export async function syncSkins(): Promise<boolean> {

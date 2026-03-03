@@ -4,7 +4,7 @@ use super::db;
 use super::error::SkinsError;
 use super::models::{
     BuddiesApiResponse, ContentTiersApiResponse, FlexApiResponse, PlayercardsApiResponse,
-    SkinsApiResponse, SpraysApiResponse, VersionApiResponse,
+    PlayerTitlesApiResponse, SkinsApiResponse, SpraysApiResponse, VersionApiResponse,
 };
 
 const CONTENT_TIERS_URL: &str = "https://valorant-api.com/v1/contenttiers";
@@ -13,6 +13,7 @@ const BUDDIES_URL: &str = "https://valorant-api.com/v1/buddies";
 const FLEX_URL: &str = "https://valorant-api.com/v1/flex";
 const PLAYERCARDS_URL: &str = "https://valorant-api.com/v1/playercards";
 const SPRAYS_URL: &str = "https://valorant-api.com/v1/sprays";
+const PLAYER_TITLES_URL: &str = "https://valorant-api.com/v1/playertitles";
 const VERSION_URL: &str = "https://valorant-api.com/v1/version";
 
 fn build_client() -> Result<reqwest::Client, SkinsError> {
@@ -103,6 +104,21 @@ async fn fetch_sprays(client: &reqwest::Client) -> Result<SpraysApiResponse, Ski
     resp.json().await.map_err(SkinsError::from)
 }
 
+async fn fetch_player_titles(
+    client: &reqwest::Client,
+) -> Result<PlayerTitlesApiResponse, SkinsError> {
+    let resp = client.get(PLAYER_TITLES_URL).send().await?;
+
+    if !resp.status().is_success() {
+        return Err(SkinsError::ApiFailed(format!(
+            "playertitles returned status {}",
+            resp.status()
+        )));
+    }
+
+    resp.json().await.map_err(SkinsError::from)
+}
+
 async fn fetch_version(client: &reqwest::Client) -> Result<String, SkinsError> {
     let resp = client.get(VERSION_URL).send().await?;
 
@@ -148,37 +164,50 @@ pub async fn sync_skins_database() -> Result<bool, SkinsError> {
 
     // Tiers are fetched together with weapons since they share a foreign key.
     if version_changed || status.weapons_empty {
+        log::info!("Fetching content tiers...");
         let tiers = fetch_content_tiers(&client).await?;
         db::insert_tiers(&tiers.data)?;
         log::info!("Synced {} content tiers", tiers.data.len());
 
+        log::info!("Fetching weapon skins...");
         let skins = fetch_weapon_skins(&client).await?;
         db::insert_skins(&skins.data)?;
         log::info!("Inserted/updated {} weapon skins", skins.data.len());
     }
 
     if version_changed || status.buddies_empty {
+        log::info!("Fetching buddies...");
         let buddies = fetch_buddies(&client).await?;
         db::insert_buddies(&buddies.data)?;
         log::info!("Inserted/updated {} buddies", buddies.data.len());
     }
 
     if version_changed || status.flex_empty {
+        log::info!("Fetching flex items...");
         let flex = fetch_flex(&client).await?;
         db::insert_flex(&flex.data)?;
         log::info!("Inserted/updated {} flex items", flex.data.len());
     }
 
     if version_changed || status.playercards_empty {
+        log::info!("Fetching playercards...");
         let playercards = fetch_playercards(&client).await?;
         db::insert_playercards(&playercards.data)?;
         log::info!("Inserted/updated {} playercards", playercards.data.len());
     }
 
     if version_changed || status.sprays_empty {
+        log::info!("Fetching sprays...");
         let sprays = fetch_sprays(&client).await?;
         db::insert_sprays(&sprays.data)?;
         log::info!("Inserted/updated {} sprays", sprays.data.len());
+    }
+
+    if version_changed || status.titles_empty {
+        log::info!("Fetching player titles...");
+        let titles = fetch_player_titles(&client).await?;
+        db::insert_titles(&titles.data)?;
+        log::info!("Inserted/updated {} player titles", titles.data.len());
     }
 
     // Version is only written after successful data insertion (retry-safe).

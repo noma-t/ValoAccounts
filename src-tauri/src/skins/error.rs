@@ -8,7 +8,14 @@ pub enum SkinsError {
 impl std::fmt::Display for SkinsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Http(e) => write!(f, "HTTP error: {}", e),
+            Self::Http(e) => {
+                use std::error::Error as StdError;
+                if let Some(source) = e.source() {
+                    write!(f, "HTTP error: {} (caused by: {})", e, source)
+                } else {
+                    write!(f, "HTTP error: {}", e)
+                }
+            }
             Self::Database(msg) => write!(f, "Database error: {}", msg),
             Self::ApiFailed(msg) => write!(f, "API failed: {}", msg),
         }

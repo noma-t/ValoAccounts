@@ -555,6 +555,11 @@ fn get_flex_info_batch(uuids: Vec<String>) -> Result<Vec<Option<skins::FlexItem>
 }
 
 #[tauri::command]
+fn get_title_info_batch(uuids: Vec<String>) -> Result<Vec<Option<skins::TitleItem>>, String> {
+    skins::get_titles_by_uuids(&uuids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_playercard_info(uuid: String) -> Result<Option<skins::PlayercardItem>, String> {
     skins::get_playercard_by_uuid(&uuid).map_err(|e| e.to_string())
 }
@@ -696,6 +701,7 @@ pub fn run() {
             get_buddy_info_batch,
             get_flex_info,
             get_flex_info_batch,
+            get_title_info_batch,
             get_playercard_info,
             get_playercard_info_batch,
             get_spray_info,

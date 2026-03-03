@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::types::{ApiStorefront, Bundle, BundleItem, DailyOffer, NightMarketOffer, Storefront};
+use super::types::{AccessoryOffer, ApiStorefront, Bundle, BundleItem, DailyOffer, NightMarketOffer, Storefront};
 
 // Known ItemTypeID values from the Valorant storefront API.
 // These are used on the frontend to dispatch item lookups to the correct DB table.
@@ -115,10 +115,31 @@ pub(super) fn parse_storefront(
             .collect()
     });
 
+    let accessories_remaining_secs = raw
+        .accessory_store
+        .as_ref()
+        .map(|a| a.remaining_duration_secs);
+
+    let accessories = raw.accessory_store.map(|a| {
+        a.offers
+            .into_iter()
+            .filter_map(|o| {
+                let reward = o.offer.rewards.into_iter().next()?;
+                Some(AccessoryOffer {
+                    item_uuid: reward.item_id,
+                    item_type_id: reward.item_type_id,
+                    kc_cost: first_cost(&o.offer.cost),
+                })
+            })
+            .collect()
+    });
+
     Storefront {
         daily_offers,
         daily_remaining_secs: raw.skins_panel_layout.remaining_duration_secs,
         bundles,
+        accessories,
+        accessories_remaining_secs,
         night_market,
         night_market_remaining_secs,
     }
