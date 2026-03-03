@@ -112,6 +112,16 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
         [],
     );
 
+    let _ = conn.execute(
+        "ALTER TABLE storefront_cache ADD COLUMN accessories_json TEXT",
+        [],
+    );
+
+    let _ = conn.execute(
+        "ALTER TABLE storefront_cache ADD COLUMN acc_expires_at INTEGER",
+        [],
+    );
+
     migrate_existing_accounts(conn)?;
 
     Ok(())
