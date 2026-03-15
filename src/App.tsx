@@ -98,16 +98,16 @@ function App() {
   async function handleKillRiotClient() {
     try {
       await killRiotClient()
-    } catch (error) {
-      console.error('Failed to kill Riot Client:', error)
+    } catch {
+      // Kill failed silently
     }
   }
 
   async function handleLaunchRiotClient() {
     try {
       await launchRiotClient()
-    } catch (error) {
-      console.error('Failed to launch Riot Client:', error)
+    } catch {
+      // Launch failed silently
     }
   }
 
