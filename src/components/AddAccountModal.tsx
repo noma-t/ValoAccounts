@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
-import { VALORANT_RANKS, RANK_ICON_MAP } from '../types/account'
-import type { CreateAccount, ValorantRank } from '../types/account'
+import { useState, useEffect } from 'react'
+import type { CreateAccount } from '../types/account'
 import { getSettings } from '../lib/tauri'
+import { MODAL_STYLES, RankDropdown, PasswordInput } from './shared'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -11,24 +11,6 @@ interface AddAccountModalProps {
   valorantRunning: boolean
   onClose: () => void
   onSubmit: (account: CreateAccount) => Promise<void>
-}
-
-const MODAL_STYLES = {
-  overlay: 'fixed inset-0 bg-black/70 flex items-center justify-center z-50',
-  dialog: 'bg-neutral-900 border border-neutral-700/70 rounded-lg p-5 w-full max-w-sm mx-4 shadow-2xl',
-  fieldGroup: 'mb-3',
-  label: 'block text-xs font-medium text-neutral-400 mb-1',
-  input: 'w-full bg-neutral-800 border border-neutral-700/50 rounded px-2.5 py-1.5 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors',
-  select: 'w-full bg-neutral-800 border border-neutral-700/50 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-neutral-500 transition-colors appearance-none',
-  radioGroup: 'gap-3 mt-1',
-  radioLabel: 'flex items-center gap-1.5 cursor-pointer',
-  radioLabelDisabled: 'flex items-center gap-1.5 cursor-not-allowed opacity-40',
-  radioText: 'text-sm text-neutral-300',
-  divider: 'border-t border-neutral-800 my-3',
-  actions: 'flex justify-end gap-2 mt-4',
-  cancelButton: 'px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-750 border border-neutral-700/50 text-neutral-300 text-sm rounded transition-colors',
-  submitButton: 'px-3 py-1.5 bg-red-700 hover:bg-red-600 active:bg-red-800 text-white text-sm font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-  fetchButton: 'px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 active:bg-neutral-800 border border-neutral-600/50 text-neutral-300 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
 }
 
 export function AddAccountModal({
@@ -45,18 +27,21 @@ export function AddAccountModal({
   const [rank, setRank] = useState('Unranked')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [useCurrentData, setUseCurrentData] = useState(false)
-  const [_isFetchingRank, _setIsFetchingRank] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showRankDropdown, setShowRankDropdown] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
-  const rankDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isOpen) {
-      resetForm()
+      setRiotId('')
+      setTagline('')
+      setRank('Unranked')
+      setUsername('')
+      setPassword('')
+      setUseCurrentData(false)
+      setIsSubmitting(false)
+      setError(null)
     } else {
       getSettings()
         .then((settings) => setActiveAccountId(settings.active_account_id))
@@ -69,48 +54,6 @@ export function AddAccountModal({
       setUseCurrentData(false)
     }
   }, [isCurrentDataAvailable, riotClientRunning, valorantRunning, useCurrentData])
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (rankDropdownRef.current && !rankDropdownRef.current.contains(e.target as Node)) {
-        setShowRankDropdown(false)
-      }
-    }
-    if (showRankDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showRankDropdown])
-
-  function resetForm() {
-    setRiotId('')
-    setTagline('')
-    setRank('Unranked')
-    setUsername('')
-    setPassword('')
-    setShowPassword(false)
-    setUseCurrentData(false)
-    setShowRankDropdown(false)
-    _setIsFetchingRank(false)
-    setIsSubmitting(false)
-    setError(null)
-  }
-
-  // async function _handleFetchRank() {
-  //   if (!tagline || !riotId) return
-
-  //   _setIsFetchingRank(true)
-  //   setError(null)
-
-  //   try {
-  //     // TODO: implement rank fetch via Henrikdev API Tauri command
-  //     setError('Rank auto-fetch is not yet implemented')
-  //   } catch (err) {
-  //     setError('Failed to fetch rank')
-  //   } finally {
-  //     _setIsFetchingRank(false)
-  //   }
-  // }
 
   async function handleSubmit() {
     if (!riotId.trim()) {
@@ -171,40 +114,7 @@ export function AddAccountModal({
                 />
               </div>
             </div>
-            <div className="relative" ref={rankDropdownRef}>
-              <label className={MODAL_STYLES.label}>Rank</label>
-              <button
-                type="button"
-                className="flex items-center justify-center p-1.5 bg-neutral-800 border border-neutral-700/50 rounded hover:border-neutral-500 transition-colors"
-                onClick={() => setShowRankDropdown(!showRankDropdown)}
-                title={rank}
-              >
-                <img
-                  src={`/rank_icon/${RANK_ICON_MAP[rank as ValorantRank]}.png`}
-                  alt={rank}
-                  className="w-5 h-5 object-contain"
-                />
-              </button>
-              {showRankDropdown && (
-                <div className="absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/70 rounded shadow-2xl z-10 max-h-52 overflow-y-auto">
-                  {VALORANT_RANKS.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-sm text-left transition-colors ${rank === r ? 'bg-neutral-700 text-white' : 'text-neutral-300 hover:bg-neutral-800'}`}
-                      onClick={() => { setRank(r); setShowRankDropdown(false) }}
-                    >
-                      <img
-                        src={`/rank_icon/${RANK_ICON_MAP[r]}.png`}
-                        alt={r}
-                        className="w-5 h-5 object-contain"
-                      />
-                      <span>{r}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <RankDropdown rank={rank} onRankChange={setRank} />
           </div>
         </div>
 
@@ -221,34 +131,7 @@ export function AddAccountModal({
 
         <div className={MODAL_STYLES.fieldGroup}>
           <label className={MODAL_STYLES.label}>Password</label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              className="w-full bg-neutral-800 border border-neutral-700/50 rounded px-2.5 py-1.5 pr-8 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
-              onClick={() => setShowPassword(!showPassword)}
-              title={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-            </button>
-          </div>
+          <PasswordInput value={password} onChange={setPassword} />
         </div>
 
         <div className={MODAL_STYLES.divider} />

@@ -1,0 +1,17 @@
+export const MODAL_STYLES = {
+  overlay: 'fixed inset-0 bg-black/70 flex items-center justify-center z-50',
+  dialog: 'bg-neutral-900 border border-neutral-700/70 rounded-lg p-5 w-full max-w-sm mx-4 shadow-2xl',
+  fieldGroup: 'mb-3',
+  label: 'block text-xs font-medium text-neutral-400 mb-1',
+  input: 'w-full bg-neutral-800 border border-neutral-700/50 rounded px-2.5 py-1.5 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors',
+  select: 'w-full bg-neutral-800 border border-neutral-700/50 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-neutral-500 transition-colors appearance-none',
+  radioGroup: 'gap-3 mt-1',
+  radioLabel: 'flex items-center gap-1.5 cursor-pointer',
+  radioLabelDisabled: 'flex items-center gap-1.5 cursor-not-allowed opacity-40',
+  radioText: 'text-sm text-neutral-300',
+  divider: 'border-t border-neutral-800 my-3',
+  actions: 'flex justify-end gap-2 mt-4',
+  cancelButton: 'px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-750 border border-neutral-700/50 text-neutral-300 text-sm rounded transition-colors',
+  submitButton: 'px-3 py-1.5 bg-red-700 hover:bg-red-600 active:bg-red-800 text-white text-sm font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+  fetchButton: 'px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 active:bg-neutral-800 border border-neutral-600/50 text-neutral-300 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+}
