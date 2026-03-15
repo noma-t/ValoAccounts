@@ -51,8 +51,8 @@ export function SettingsPage({ onSettingsUpdated }: SettingsPageProps) {
     try {
       const dir = await getAppDir()
       setAppDir(dir)
-    } catch (err) {
-      console.error('Failed to get app directory:', err)
+    } catch {
+      // App directory not available
     }
   }
 
@@ -65,16 +65,16 @@ export function SettingsPage({ onSettingsUpdated }: SettingsPageProps) {
         if (!riotServicePath) {
           try {
             riotServicePath = await getDefaultRiotClientServicePath()
-          } catch (err) {
-            console.error('Failed to get default Riot Client Service path:', err)
+          } catch {
+            // Default path not available
           }
         }
 
         if (!riotDataPath) {
           try {
             riotDataPath = await getDefaultRiotClientDataPath()
-          } catch (err) {
-            console.error('Failed to get default Riot Client Data path:', err)
+          } catch {
+            // Default path not available
           }
         }
 
@@ -131,7 +131,6 @@ export function SettingsPage({ onSettingsUpdated }: SettingsPageProps) {
         })
       }
     } catch (err) {
-      console.error('Failed to select file:', err)
       setError(err instanceof Error ? err.message : 'Failed to select file')
     }
   }
@@ -153,7 +152,6 @@ export function SettingsPage({ onSettingsUpdated }: SettingsPageProps) {
         })
       }
     } catch (err) {
-      console.error('Failed to select directory:', err)
       setError(err instanceof Error ? err.message : 'Failed to select directory')
     }
   }
@@ -166,7 +164,6 @@ export function SettingsPage({ onSettingsUpdated }: SettingsPageProps) {
       setSettings(updatedSettings)
       onSettingsUpdated?.()
     } catch (err) {
-      console.error(`[SettingsPage] Error saving ${settingKey}:`, err)
       setError(err instanceof Error ? err.message : 'Failed to save setting')
     }
   }
