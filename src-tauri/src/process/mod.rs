@@ -96,11 +96,6 @@ pub fn launch_riot_client() -> Result<(), String> {
 }
 
 pub fn start_process_monitor(app_handle: AppHandle) {
-    RIOT_CLIENT_RUNNING
-        .get_or_init(|| AtomicBool::new(check_process_running("RiotClientServices.exe")));
-    VALORANT_RUNNING
-        .get_or_init(|| AtomicBool::new(check_process_running("VALORANT-Win64-Shipping.exe")));
-
     std::thread::spawn(move || {
         let com_lib = match COMLibrary::new() {
             Ok(lib) => lib,
@@ -116,6 +111,19 @@ pub fn start_process_monitor(app_handle: AppHandle) {
                 return;
             }
         };
+
+        let riot_initial = query_process_running(&wmi_con, "RiotClientServices.exe");
+        let valo_initial = query_process_running(&wmi_con, "VALORANT-Win64-Shipping.exe");
+
+        RIOT_CLIENT_RUNNING.get_or_init(|| AtomicBool::new(riot_initial));
+        VALORANT_RUNNING.get_or_init(|| AtomicBool::new(valo_initial));
+
+        if let Err(e) = app_handle.emit("riot-client-status", riot_initial) {
+            eprintln!("Failed to emit initial riot-client-status: {}", e);
+        }
+        if let Err(e) = app_handle.emit("valorant-status", valo_initial) {
+            eprintln!("Failed to emit initial valorant-status: {}", e);
+        }
 
         loop {
             std::thread::sleep(Duration::from_secs(2));
