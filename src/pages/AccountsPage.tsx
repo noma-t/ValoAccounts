@@ -241,8 +241,7 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
     try {
       await copyAccountPassword(accountId)
       toast('success', 'Copied password')
-    } catch (error) {
-      console.error('[handleCopyPassword] accountId:', accountId, 'error:', error)
+    } catch {
       toast('error', 'Failed to copy password')
     }
   }
@@ -334,8 +333,8 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
         setSelectedAccountId(accountId)
       }
       loadAccounts()
-    } catch (error) {
-      console.error('Switch failed:', error)
+    } catch {
+      toast('error', 'Failed to switch account')
     } finally {
       setIsSwitching(false)
     }
