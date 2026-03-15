@@ -18,8 +18,8 @@ const navigationItems: NavigationItem[] = [
 function App() {
   const [activePage, setActivePage] = useState<string | null>(null)
   const [hasApiKey, setHasApiKey] = useState(false)
-  const [riotClientRunning, setRiotClientRunning] = useState(false)
-  const [valorantRunning, setValorantRunning] = useState(false)
+  const [riotClientRunning, setRiotClientRunning] = useState(true)
+  const [valorantRunning, setValorantRunning] = useState(true)
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false)
   const [isCurrentDataAvailable, setIsCurrentDataAvailable] = useState(false)
   const [accountsRefreshToken, setAccountsRefreshToken] = useState(0)
@@ -27,14 +27,8 @@ function App() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        const [settings, riotStatus, valorantStatus] = await Promise.all([
-          getSettings(),
-          getRiotClientStatus().catch(() => false),
-          getValorantStatus().catch(() => false),
-        ])
+        const settings = await getSettings()
         setHasApiKey(!!settings.henrikdev_api_key)
-        setRiotClientRunning(riotStatus)
-        setValorantRunning(valorantStatus)
         if (!settings.launched) {
           await markLaunched()
           setActivePage('settings')
@@ -59,17 +53,35 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const unlisten = listen<boolean>('riot-client-status', (event) => {
-      setRiotClientRunning(event.payload)
-    })
+    let cleanup: (() => void) | null = null
 
-    const unlistenValorant = listen<boolean>('valorant-status', (event) => {
-      setValorantRunning(event.payload)
-    })
+    const setupListeners = async () => {
+      const [unlisten, unlistenValorant] = await Promise.all([
+        listen<boolean>('riot-client-status', (event) => {
+          setRiotClientRunning(event.payload)
+        }),
+        listen<boolean>('valorant-status', (event) => {
+          setValorantRunning(event.payload)
+        }),
+      ])
+
+      cleanup = () => {
+        unlisten()
+        unlistenValorant()
+      }
+
+      const [riotStatus, valorantStatus] = await Promise.all([
+        getRiotClientStatus().catch(() => false),
+        getValorantStatus().catch(() => false),
+      ])
+      setRiotClientRunning(riotStatus)
+      setValorantRunning(valorantStatus)
+    }
+
+    void setupListeners()
 
     return () => {
-      void unlisten.then((fn) => fn())
-      void unlistenValorant.then((fn) => fn())
+      cleanup?.()
     }
   }, [])
 
