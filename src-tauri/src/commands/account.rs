@@ -50,16 +50,25 @@ pub fn check_current_data_available() -> Result<bool, String> {
 pub fn switch_account(account_id: Option<i64>) -> Result<(), String> {
     log::info!("Starting account switch: {:?}", account_id);
 
-    if crate::process::check_riot_client_running() {
-        log::warn!("Cannot switch accounts: Riot Client is running");
-        return Err("Cannot switch accounts while Riot Client is running".to_string());
-    }
     if crate::process::check_valorant_running() {
         log::warn!("Cannot switch accounts: Valorant is running");
         return Err("Cannot switch accounts while Valorant is running".to_string());
     }
 
+    let riot_client_was_running = crate::process::check_riot_client_running();
+
+    if riot_client_was_running {
+        log::info!("Riot Client is running, killing it before account switch");
+        crate::process::kill_riot_client()?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
     perform_account_switch(account_id)?;
+
+    if riot_client_was_running {
+        log::info!("Relaunching Riot Client after account switch");
+        crate::process::launch_riot_client()?;
+    }
 
     log::info!("Account switch completed successfully");
     Ok(())
