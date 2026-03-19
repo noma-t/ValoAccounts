@@ -206,7 +206,7 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [isSwitching, setIsSwitching] = useState(false)
 
-  const selectDisabled = riotClientRunning || valorantRunning || isSwitching
+  const selectDisabled = valorantRunning || isSwitching
 
   useEffect(() => {
     loadAccounts()
