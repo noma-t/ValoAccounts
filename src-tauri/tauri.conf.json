@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "ValoAccounts",
-        "width": 700,
-        "height": 310,
+        "width": 710,
+        "height": 345,
         "minWidth": 510,
-        "minHeight": 310,
+        "minHeight": 320,
         "visible": false
       }
     ],
