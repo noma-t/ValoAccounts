@@ -1,5 +1,5 @@
 import type { Storefront, SkinWeapon } from './tauri'
-import { ITEM_TYPE_SKIN, ITEM_TYPE_SPRAY, ITEM_TYPE_BUDDY, ITEM_TYPE_PLAYERCARD, ITEM_TYPE_TITLE } from './tauri'
+import { ITEM_TYPE_SKIN, ITEM_TYPE_SPRAY, ITEM_TYPE_BUDDY, ITEM_TYPE_PLAYERCARD } from './tauri'
 import type { ItemInfo } from './shop-utils'
 
 export const MOCK_SKIN_MAP: Record<string, SkinWeapon> = {
@@ -31,9 +31,7 @@ export const MOCK_ITEM_MAP: Record<string, ItemInfo | null> = {
   'mock-acc-spray-1': { kind: 'spray', data: { uuid: 'mock-acc-spray-1', display_name: 'DEMO Spray 1', display_icon: null, full_transparent_icon: null, animation_gif: null, asset_path: null, level_uuid: 'mock-acc-spray-1', spray_level: null } },
   'mock-acc-spray-2': { kind: 'spray', data: { uuid: 'mock-acc-spray-2', display_name: 'DEMO Spray 2', display_icon: null, full_transparent_icon: null, animation_gif: null, asset_path: null, level_uuid: 'mock-acc-spray-2', spray_level: null } },
   'mock-acc-buddy-1': { kind: 'buddy', data: { uuid: 'mock-acc-buddy-1', display_name: 'DEMO Buddy 1', display_icon: null, asset_path: null, level_uuid: 'mock-acc-buddy-1', charm_level: null } },
-  'mock-acc-buddy-2': { kind: 'buddy', data: { uuid: 'mock-acc-buddy-2', display_name: 'DEMO Buddy 2', display_icon: null, asset_path: null, level_uuid: 'mock-acc-buddy-2', charm_level: null } },
   'mock-acc-card-1': { kind: 'playercard', data: { uuid: 'mock-acc-card-1', display_name: 'DEMO Player Card', display_icon: null, small_art: null, wide_art: null, large_art: null, asset_path: null } },
-  'mock-acc-title-1': { kind: 'title', data: { uuid: 'mock-acc-title-1', display_name: 'DEMO Title', title_text: 'The Demo', asset_path: null } },
 }
 
 export const MOCK_STOREFRONT: Storefront = {
@@ -79,9 +77,7 @@ export const MOCK_STOREFRONT: Storefront = {
     { item_uuid: 'mock-acc-spray-1', item_type_id: ITEM_TYPE_SPRAY, kc_cost: 375 },
     { item_uuid: 'mock-acc-spray-2', item_type_id: ITEM_TYPE_SPRAY, kc_cost: 375 },
     { item_uuid: 'mock-acc-buddy-1', item_type_id: ITEM_TYPE_BUDDY, kc_cost: 400 },
-    { item_uuid: 'mock-acc-buddy-2', item_type_id: ITEM_TYPE_BUDDY, kc_cost: 400 },
     { item_uuid: 'mock-acc-card-1', item_type_id: ITEM_TYPE_PLAYERCARD, kc_cost: 500 },
-    { item_uuid: 'mock-acc-title-1', item_type_id: ITEM_TYPE_TITLE, kc_cost: 500 },
   ],
   accessories_remaining_secs: 3600 * 24 * 3,
   night_market: [
