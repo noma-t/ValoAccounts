@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { listAccounts, updateAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile, openShopWindow } from '../lib/tauri'
+import { listAccounts, updateAccount, deleteAccount, getSettings, switchAccount, copyAccountPassword, openTrackerProfile, openShopWindow } from '../lib/tauri'
 import { RANK_ICON_MAP } from '../types/account'
 import type { Account, UpdateAccount, ValorantRank } from '../types/account'
 import { EditAccountModal } from '../components/EditAccountModal'
@@ -255,6 +255,16 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
     loadAccounts()
   }
 
+  async function handleDelete(id: number) {
+    try {
+      await deleteAccount(id)
+      setEditingAccount(null)
+      loadAccounts()
+    } catch {
+      toast('error', 'Failed to delete account')
+    }
+  }
+
   function handleOpenTracker(account: Account) {
     if (!account.riot_id || !account.tagline) return
     openTrackerProfile(account.riot_id, account.tagline).catch(() => {})
@@ -366,6 +376,8 @@ export function AccountsPage({ refreshToken, riotClientRunning = false, valorant
         account={editingAccount}
         onClose={() => setEditingAccount(null)}
         onSubmit={handleEditSubmit}
+        onDelete={handleDelete}
+        isActive={editingAccount?.id === selectedAccountId}
       />
     </div>
   )

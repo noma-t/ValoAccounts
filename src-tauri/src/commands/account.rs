@@ -42,6 +42,11 @@ pub fn edit_account(account: UpdateAccount) -> Result<crate::db::models::Account
 }
 
 #[tauri::command]
+pub fn delete_account(account_id: i64) -> Result<(), String> {
+    crate::db::delete_account(account_id)
+}
+
+#[tauri::command]
 pub fn check_current_data_available() -> Result<bool, String> {
     is_current_data_available()
 }

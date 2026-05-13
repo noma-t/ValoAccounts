@@ -154,6 +154,30 @@ pub fn update_account(data: UpdateAccount) -> Result<Account, String> {
     get_account_by_id(&conn, data.id)
 }
 
+pub fn delete_account(account_id: i64) -> Result<(), String> {
+    let conn = get_connection(None)?;
+    let account = get_account_by_id(&conn, account_id)?;
+
+    let settings = super::settings::get_settings()?;
+    let account_data_path = match settings.account_data_path {
+        Some(path) => std::path::PathBuf::from(path),
+        None => super::init::get_default_account_data_path()?,
+    };
+
+    if let Some(folder) = account.data_folder {
+        let folder_path = account_data_path.join(&folder);
+        if folder_path.exists() {
+            std::fs::remove_dir_all(&folder_path)
+                .map_err(|e| format!("Failed to delete data folder: {}", e))?;
+        }
+    }
+
+    conn.execute("DELETE FROM accounts WHERE id = ?1", [account_id])
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 pub fn is_current_data_available() -> Result<bool, String> {
     let conn = get_connection(None)?;
 

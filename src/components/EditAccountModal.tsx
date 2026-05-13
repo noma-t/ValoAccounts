@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
 import type { Account, UpdateAccount } from '../types/account'
 import { MODAL_STYLES, RankDropdown, PasswordInput } from './shared'
+import { DeleteConfirmModal } from './DeleteConfirmModal'
 
 interface EditAccountModalProps {
   account: Account | null
   onClose: () => void
   onSubmit: (account: UpdateAccount) => Promise<void>
+  onDelete: (id: number) => Promise<void>
+  isActive: boolean
 }
 
-export function EditAccountModal({ account, onClose, onSubmit }: EditAccountModalProps) {
+export function EditAccountModal({ account, onClose, onSubmit, onDelete, isActive }: EditAccountModalProps) {
   const [riotId, setRiotId] = useState('')
   const [tagline, setTagline] = useState('')
   const [rank, setRank] = useState('Unranked')
@@ -16,6 +19,7 @@ export function EditAccountModal({ account, onClose, onSubmit }: EditAccountModa
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     if (account) {
@@ -64,6 +68,7 @@ export function EditAccountModal({ account, onClose, onSubmit }: EditAccountModa
   if (!account) return null
 
   return (
+    <>
     <div className={MODAL_STYLES.overlay} onClick={handleOverlayClick}>
       <div className={MODAL_STYLES.dialog}>
         <div className={MODAL_STYLES.fieldGroup}>
@@ -119,21 +124,40 @@ export function EditAccountModal({ account, onClose, onSubmit }: EditAccountModa
         <div className={MODAL_STYLES.actions}>
           <button
             type="button"
-            className={MODAL_STYLES.cancelButton}
-            onClick={onClose}
+            className={`${MODAL_STYLES.deleteButton} disabled:opacity-40 disabled:cursor-not-allowed`}
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isActive}
+            title={isActive ? 'Active account cannot be deleted' : undefined}
           >
-            Cancel
+            Delete
           </button>
-          <button
-            type="button"
-            className={MODAL_STYLES.submitButton}
-            onClick={handleSubmit}
-            disabled={isSubmitting || !riotId.trim()}
-          >
-            {isSubmitting ? 'Saving...' : 'Save'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={MODAL_STYLES.cancelButton}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={MODAL_STYLES.submitButton}
+              onClick={handleSubmit}
+              disabled={isSubmitting || !riotId.trim()}
+            >
+              {isSubmitting ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
+    {showDeleteConfirm && (
+      <DeleteConfirmModal
+        accountName={`${riotId}#${tagline}`}
+        onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={() => { setShowDeleteConfirm(false); onDelete(account.id) }}
+      />
+    )}
+    </>
   )
 }

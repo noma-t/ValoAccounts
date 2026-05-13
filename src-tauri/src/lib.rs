@@ -73,6 +73,7 @@ pub fn run() {
             commands::account::list_accounts,
             commands::account::edit_account,
             commands::account::check_current_data_available,
+            commands::account::delete_account,
             commands::util::mark_launched,
             commands::account::switch_account,
             commands::process::get_riot_client_status,

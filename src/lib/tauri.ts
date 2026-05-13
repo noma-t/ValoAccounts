@@ -35,6 +35,10 @@ export async function updateAccount(account: UpdateAccount): Promise<Account> {
   return invoke('edit_account', { account })
 }
 
+export async function deleteAccount(accountId: number): Promise<void> {
+  return invoke('delete_account', { accountId })
+}
+
 export async function checkCurrentDataAvailable(): Promise<boolean> {
   return invoke('check_current_data_available')
 }
