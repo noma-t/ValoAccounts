@@ -53,8 +53,8 @@ export function AccessoryItemCard({ offer, info }: AccessoryItemCardProps) {
         <div className="absolute inset-3 rounded bg-neutral-700/50" />
       )}
 
-      <div className="absolute top-2 right-2 flex items-baseline gap-0.5 text-sm text-green-300 leading-none">
-        <span className="text-sm font-bold text-green-400">K</span>
+      <div className="absolute top-2 right-2 flex items-center gap-1 text-sm text-green-300 leading-none">
+        <img src="/kingdom.png" alt="" width={14} height={14} className="opacity-70 block shrink-0" />
         <span className="tabular-nums">{formatVp(offer.kc_cost)}</span>
       </div>
 

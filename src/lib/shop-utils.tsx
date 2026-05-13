@@ -52,5 +52,5 @@ export function formatVp(vp: number): string {
 }
 
 export function VpIcon() {
-  return <img src="/valo-icon.svg" alt="" width={12} height={12} className="opacity-70 block shrink-0" />
+  return <img src="/vp.png" alt="" width={14} height={14} className="opacity-70 block shrink-0" />
 }
