@@ -5,6 +5,7 @@
   "windows": ["shop-*"],
   "permissions": [
     "core:default",
+    "log:default",
     "core:window:allow-close"
   ]
 }

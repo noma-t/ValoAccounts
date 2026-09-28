@@ -11,14 +11,42 @@ use std::sync::atomic::Ordering;
 use db::initialize_database;
 use tauri::Manager;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .init();
+/// Directory for log files: `<exe dir>/logs`, alongside `data.db`.
+fn get_log_dir() -> Result<std::path::PathBuf, String> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to get executable path: {}", e))?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or("Failed to get executable directory")?;
+    Ok(exe_dir.join("logs"))
+}
 
-    log::info!("Starting valo-accounts application");
+fn build_log_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
+    let mut targets = vec![
+        Target::new(TargetKind::Stdout),
+        Target::new(TargetKind::Webview),
+    ];
+    match get_log_dir() {
+        Ok(path) => targets.push(Target::new(TargetKind::Folder {
+            path,
+            file_name: Some("valo-accounts".to_string()),
+        })),
+        Err(e) => eprintln!("File logging disabled: {}", e),
+    }
+
+    tauri_plugin_log::Builder::new()
+        .targets(targets)
+        .level(log::LevelFilter::Info)
+        .level_for("valo_accounts_lib", log::LevelFilter::Debug)
+        .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+        .max_file_size(5_000_000)
+        .rotation_strategy(RotationStrategy::KeepSome(5))
+        .build()
+}
+
+fn initialize_databases() {
     #[cfg(debug_assertions)]
     if std::env::args().any(|a| a == "--demo") {
         commands::util::DEMO_MODE.store(true, Ordering::Relaxed);
@@ -34,7 +62,10 @@ pub fn run() {
     if let Err(e) = skins::initialize_skins_db(None) {
         log::error!("Failed to initialize skins database: {}", e);
     }
+}
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -43,7 +74,14 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(build_log_plugin())
         .setup(|app| {
+            log::info!(
+                "Starting valo-accounts application v{}",
+                app.package_info().version
+            );
+            initialize_databases();
+
             process::start_process_monitor(app.handle().clone());
 
             tauri::async_runtime::spawn(async {

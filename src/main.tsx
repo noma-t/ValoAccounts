@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { attachConsole } from "@tauri-apps/plugin-log";
 import App from "./App";
 import { ShopWindow } from "./pages/ShopWindow";
 
@@ -16,6 +17,11 @@ function getShopAccountId(): number | null {
   }
   return null
 }
+
+// Forward Rust-side logs to the DevTools console
+attachConsole().catch(() => {
+  // Not in a Tauri context; nothing to attach
+})
 
 const shopAccountId = getShopAccountId()
 
