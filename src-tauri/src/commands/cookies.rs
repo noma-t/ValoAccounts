@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::db::{get_account, get_settings};
 
@@ -6,16 +6,40 @@ use crate::db::{get_account, get_settings};
 pub fn get_account_cookies(
     account_id: i64,
 ) -> Result<Option<crate::shop::RiotCookies>, String> {
+    log::info!("get_account_cookies: account {}", account_id);
+
     let yaml_path = match resolve_account_yaml_path(account_id)? {
         Some(path) => path,
-        None => return Ok(None),
+        None => {
+            log::warn!(
+                "get_account_cookies: no session for account {} (YAML file not found)",
+                account_id
+            );
+            return Ok(None);
+        }
     };
 
-    let content = std::fs::read_to_string(&yaml_path)
-        .map_err(|e| format!("Failed to read settings file: {}", e))?;
+    log_yaml_file_metadata(&yaml_path);
 
-    let doc: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    let content = std::fs::read_to_string(&yaml_path).map_err(|e| {
+        log::error!(
+            "get_account_cookies: failed to read {}: {}",
+            yaml_path.display(),
+            e
+        );
+        format!("Failed to read settings file: {}", e)
+    })?;
+
+    let doc: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|e| {
+        log::error!(
+            "get_account_cookies: failed to parse YAML {}: {}",
+            yaml_path.display(),
+            e
+        );
+        format!("Failed to parse YAML: {}", e)
+    })?;
+
+    log_yaml_session_structure(&doc);
 
     let session_cookies = doc
         .get("riot-login")
@@ -38,6 +62,12 @@ pub fn get_account_cookies(
         for cookie in cookie_list {
             let name = cookie.get("name").and_then(|v| v.as_str());
             let value = cookie.get("value").and_then(|v| v.as_str());
+            // Never log cookie values; only their names and lengths
+            log::debug!(
+                "get_account_cookies: cookie entry name={:?} value_len={:?}",
+                name,
+                value.map(str::len)
+            );
             if let (Some(n), Some(v)) = (name, value) {
                 match n {
                     "asid" => cookies.asid = Some(v.to_string()),
@@ -59,19 +89,118 @@ pub fn get_account_cookies(
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
 
+    log::info!(
+        "get_account_cookies: found ssid={} asid={} ccid={} clid={} sub={} csid={} tdid={}",
+        cookies.ssid.is_some(),
+        cookies.asid.is_some(),
+        cookies.ccid.is_some(),
+        cookies.clid.is_some(),
+        cookies.sub.is_some(),
+        cookies.csid.is_some(),
+        cookies.tdid.is_some()
+    );
+
     if cookies.ssid.is_none() {
+        log::warn!(
+            "get_account_cookies: no session for account {} (ssid cookie missing in {})",
+            account_id,
+            yaml_path.display()
+        );
         return Ok(None);
     }
 
     Ok(Some(cookies))
 }
 
+fn log_yaml_file_metadata(yaml_path: &Path) {
+    match std::fs::metadata(yaml_path) {
+        Ok(meta) => {
+            let modified = meta
+                .modified()
+                .map(|t| chrono::DateTime::<chrono::Local>::from(t).to_rfc3339())
+                .unwrap_or_else(|e| format!("unknown ({})", e));
+            log::info!(
+                "get_account_cookies: YAML {} size={} bytes modified={}",
+                yaml_path.display(),
+                meta.len(),
+                modified
+            );
+        }
+        Err(e) => log::warn!(
+            "get_account_cookies: failed to read metadata of {}: {}",
+            yaml_path.display(),
+            e
+        ),
+    }
+}
+
+/// Log which keys exist along `riot-login.persist.session.cookies`,
+/// so a missing session can be traced to the exact missing level.
+fn log_yaml_session_structure(doc: &serde_yaml::Value) {
+    log::debug!("get_account_cookies: top-level keys: {:?}", mapping_keys(doc));
+
+    let path = ["riot-login", "persist", "session", "cookies"];
+    let mut current = doc;
+    for (depth, key) in path.iter().enumerate() {
+        match current.get(*key) {
+            Some(next) => current = next,
+            None => {
+                log::warn!(
+                    "get_account_cookies: key '{}' not found under '{}' (available keys: {:?})",
+                    key,
+                    path[..depth].join("."),
+                    mapping_keys(current)
+                );
+                return;
+            }
+        }
+    }
+
+    match current.as_sequence() {
+        Some(list) => log::info!(
+            "get_account_cookies: riot-login.persist.session.cookies has {} entries",
+            list.len()
+        ),
+        None => log::warn!(
+            "get_account_cookies: riot-login.persist.session.cookies is not a sequence ({})",
+            value_kind(current)
+        ),
+    }
+}
+
+fn mapping_keys(value: &serde_yaml::Value) -> Vec<String> {
+    value
+        .as_mapping()
+        .map(|m| {
+            m.keys()
+                .map(|k| k.as_str().map_or_else(|| format!("{:?}", k), str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn value_kind(value: &serde_yaml::Value) -> &'static str {
+    match value {
+        serde_yaml::Value::Null => "null",
+        serde_yaml::Value::Bool(_) => "bool",
+        serde_yaml::Value::Number(_) => "number",
+        serde_yaml::Value::String(_) => "string",
+        serde_yaml::Value::Sequence(_) => "sequence",
+        serde_yaml::Value::Mapping(_) => "mapping",
+        serde_yaml::Value::Tagged(_) => "tagged",
+    }
+}
+
 /// Resolve the path to an account's RiotGamesPrivateSettings.yaml.
 pub(super) fn resolve_account_yaml_path(account_id: i64) -> Result<Option<PathBuf>, String> {
     let account = get_account(account_id)?;
-    let data_folder = account
-        .data_folder
-        .ok_or("Account has no data directory assigned")?;
+    let data_folder = account.data_folder.ok_or_else(|| {
+        log::warn!(
+            "resolve_account_yaml_path: account {} has no data directory assigned",
+            account_id
+        );
+        "Account has no data directory assigned".to_string()
+    })?;
 
     let settings = get_settings()?;
     let account_data_path = match settings.account_data_path {
@@ -79,15 +208,75 @@ pub(super) fn resolve_account_yaml_path(account_id: i64) -> Result<Option<PathBu
         None => crate::db::init::get_default_account_data_path()?,
     };
 
-    let yaml_path = account_data_path
-        .join(&data_folder)
-        .join("RiotGamesPrivateSettings.yaml");
+    let account_dir = account_data_path.join(&data_folder);
+    let yaml_path = account_dir.join("RiotGamesPrivateSettings.yaml");
+
+    log::debug!(
+        "resolve_account_yaml_path: account {} data_folder={} account_dir={} (exists={})",
+        account_id,
+        data_folder,
+        account_dir.display(),
+        account_dir.exists()
+    );
+    log_riot_data_junction(settings.riot_client_data_path.as_deref(), &account_dir);
 
     if yaml_path.exists() {
         Ok(Some(yaml_path))
     } else {
+        log::warn!(
+            "resolve_account_yaml_path: YAML not found: {} (entries in account dir: {:?})",
+            yaml_path.display(),
+            list_file_names(&account_dir)
+        );
         Ok(None)
     }
+}
+
+/// Log where the Riot Client data junction currently points, to tell whether
+/// Riot Client is writing into this account's directory.
+fn log_riot_data_junction(configured_path: Option<&str>, account_dir: &Path) {
+    let riot_data_path = match configured_path {
+        Some(path) => PathBuf::from(path),
+        None => match crate::db::init::get_default_riot_client_data_path() {
+            Ok(path) => path,
+            Err(e) => {
+                log::debug!("resolve_account_yaml_path: riot data path unavailable: {}", e);
+                return;
+            }
+        },
+    };
+
+    match crate::fs::get_junction_target(&riot_data_path) {
+        Ok(target) => log::debug!(
+            "resolve_account_yaml_path: riot data junction {} -> {} (points to this account: {})",
+            riot_data_path.display(),
+            target.display(),
+            paths_equal(&target, account_dir)
+        ),
+        Err(e) => log::debug!(
+            "resolve_account_yaml_path: riot data path {} is not a junction: {}",
+            riot_data_path.display(),
+            e
+        ),
+    }
+}
+
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+fn list_file_names(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Update cookie values in the YAML content string without altering formatting.
