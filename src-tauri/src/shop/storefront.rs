@@ -196,6 +196,7 @@ mod tests {
     #[test]
     fn test_parse_daily_offers_with_costs() {
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec!["skin-a".to_string(), "skin-b".to_string()],
                 remaining_duration_secs: 86400,
@@ -226,6 +227,7 @@ mod tests {
     #[test]
     fn test_parse_no_store_offers_gives_zero_cost() {
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec!["skin-a".to_string()],
                 remaining_duration_secs: 0,
@@ -240,6 +242,7 @@ mod tests {
     #[test]
     fn test_parse_with_night_market() {
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec![],
                 remaining_duration_secs: 0,
@@ -269,6 +272,7 @@ mod tests {
     #[test]
     fn test_parse_no_night_market() {
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec![],
                 remaining_duration_secs: 0,
@@ -285,6 +289,7 @@ mod tests {
         use super::super::types::{ApiBundleData, ApiBundleItem, ApiBundleItemDetail, FeaturedBundleWrapper};
 
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec![],
                 remaining_duration_secs: 0,
@@ -363,6 +368,7 @@ mod tests {
         use super::super::types::{ApiBundleData, FeaturedBundleWrapper};
 
         let raw = ApiStorefront {
+            accessory_store: None,
             skins_panel_layout: SkinsPanelLayout {
                 single_item_offers: vec![],
                 remaining_duration_secs: 0,
