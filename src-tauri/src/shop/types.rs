@@ -4,7 +4,13 @@ use serde::{Deserialize, Serialize};
 
 // -- Riot account cookies -----------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Session credentials read from RiotGamesPrivateSettings.yaml.
+///
+/// Older Riot Client versions persist a cookie session (`ssid` etc. under
+/// `riot-login.persist.session.cookies`). Newer versions persist an OAuth
+/// session instead (`refresh_token` / `id_token` under
+/// `psl.authorization.riot-client`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RiotCookies {
     pub asid: Option<String>,
     pub ccid: Option<String>,
@@ -13,6 +19,17 @@ pub struct RiotCookies {
     pub csid: Option<String>,
     pub ssid: Option<String>,
     pub tdid: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default)]
+    pub id_token: Option<String>,
+}
+
+impl RiotCookies {
+    /// Whether any usable session (cookie or OAuth refresh token) is present.
+    pub fn has_session(&self) -> bool {
+        self.ssid.is_some() || self.refresh_token.is_some()
+    }
 }
 
 // -- Public output types ------------------------------------------------------
@@ -223,6 +240,14 @@ pub(super) struct ApiAccessoryReward {
 #[derive(Deserialize)]
 pub(super) struct EntitlementsResponse {
     pub(super) entitlements_token: String,
+}
+
+/// Response of `POST https://auth.riotgames.com/token` (refresh_token grant).
+#[derive(Deserialize)]
+pub(super) struct TokenResponse {
+    pub(super) access_token: String,
+    pub(super) refresh_token: Option<String>,
+    pub(super) id_token: Option<String>,
 }
 
 #[derive(Deserialize)]

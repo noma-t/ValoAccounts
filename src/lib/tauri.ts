@@ -79,6 +79,9 @@ export interface RiotCookies {
   csid: string | null
   ssid: string | null
   tdid: string | null
+  // OAuth session persisted by newer Riot Client versions
+  refresh_token: string | null
+  id_token: string | null
 }
 
 export async function getAccountCookies(accountId: number): Promise<RiotCookies | null> {

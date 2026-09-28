@@ -41,6 +41,41 @@ pub fn get_account_cookies(
 
     log_yaml_session_structure(&doc);
 
+    let cookies = parse_riot_cookies(&doc);
+
+    log::info!(
+        "get_account_cookies: found ssid={} asid={} ccid={} clid={} sub={} csid={} tdid={} refresh_token={} id_token={}",
+        cookies.ssid.is_some(),
+        cookies.asid.is_some(),
+        cookies.ccid.is_some(),
+        cookies.clid.is_some(),
+        cookies.sub.is_some(),
+        cookies.csid.is_some(),
+        cookies.tdid.is_some(),
+        cookies.refresh_token.is_some(),
+        cookies.id_token.is_some()
+    );
+
+    if !cookies.has_session() {
+        log::warn!(
+            "get_account_cookies: no session for account {} (neither ssid cookie nor riot-client refresh_token in {})",
+            account_id,
+            yaml_path.display()
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(cookies))
+}
+
+/// Extract the session credentials from a parsed RiotGamesPrivateSettings.yaml.
+///
+/// Reads both the cookie session (`riot-login.persist.session.cookies`) and
+/// the OAuth session (`psl.authorization.riot-client`) persisted by newer
+/// Riot Client versions.
+pub(crate) fn parse_riot_cookies(doc: &serde_yaml::Value) -> crate::shop::RiotCookies {
+    let mut cookies = crate::shop::RiotCookies::default();
+
     let session_cookies = doc
         .get("riot-login")
         .and_then(|v| v.get("persist"))
@@ -48,23 +83,13 @@ pub fn get_account_cookies(
         .and_then(|v| v.get("cookies"))
         .and_then(|v| v.as_sequence());
 
-    let mut cookies = crate::shop::RiotCookies {
-        asid: None,
-        ccid: None,
-        clid: None,
-        sub: None,
-        csid: None,
-        ssid: None,
-        tdid: None,
-    };
-
     if let Some(cookie_list) = session_cookies {
         for cookie in cookie_list {
             let name = cookie.get("name").and_then(|v| v.as_str());
             let value = cookie.get("value").and_then(|v| v.as_str());
             // Never log cookie values; only their names and lengths
             log::debug!(
-                "get_account_cookies: cookie entry name={:?} value_len={:?}",
+                "parse_riot_cookies: cookie entry name={:?} value_len={:?}",
                 name,
                 value.map(str::len)
             );
@@ -82,34 +107,21 @@ pub fn get_account_cookies(
         }
     }
 
-    cookies.tdid = doc
-        .get("rso-authenticator")
-        .and_then(|v| v.get("tdid"))
-        .and_then(|v| v.get("value"))
+    cookies.tdid = yaml_str(doc, &["rso-authenticator", "tdid", "value"]);
+
+    cookies.refresh_token = yaml_str(doc, &["psl", "authorization", "riot-client", "refresh_token"]);
+    cookies.id_token = yaml_str(doc, &["psl", "authorization", "riot-client", "id_token"]);
+
+    cookies
+}
+
+/// Read a non-empty string at the given key path.
+fn yaml_str(doc: &serde_yaml::Value, path: &[&str]) -> Option<String> {
+    path.iter()
+        .try_fold(doc, |current, key| current.get(*key))
         .and_then(|v| v.as_str())
-        .map(|v| v.to_string());
-
-    log::info!(
-        "get_account_cookies: found ssid={} asid={} ccid={} clid={} sub={} csid={} tdid={}",
-        cookies.ssid.is_some(),
-        cookies.asid.is_some(),
-        cookies.ccid.is_some(),
-        cookies.clid.is_some(),
-        cookies.sub.is_some(),
-        cookies.csid.is_some(),
-        cookies.tdid.is_some()
-    );
-
-    if cookies.ssid.is_none() {
-        log::warn!(
-            "get_account_cookies: no session for account {} (ssid cookie missing in {})",
-            account_id,
-            yaml_path.display()
-        );
-        return Ok(None);
-    }
-
-    Ok(Some(cookies))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 fn log_yaml_file_metadata(yaml_path: &Path) {
@@ -136,6 +148,8 @@ fn log_yaml_file_metadata(yaml_path: &Path) {
 
 /// Log which keys exist along `riot-login.persist.session.cookies`,
 /// so a missing session can be traced to the exact missing level.
+/// A missing cookie session is expected for newer Riot Client versions,
+/// which persist an OAuth session under `psl.authorization.riot-client`.
 fn log_yaml_session_structure(doc: &serde_yaml::Value) {
     log::debug!("get_account_cookies: top-level keys: {:?}", mapping_keys(doc));
 
@@ -145,7 +159,7 @@ fn log_yaml_session_structure(doc: &serde_yaml::Value) {
         match current.get(*key) {
             Some(next) => current = next,
             None => {
-                log::warn!(
+                log::debug!(
                     "get_account_cookies: key '{}' not found under '{}' (available keys: {:?})",
                     key,
                     path[..depth].join("."),
@@ -359,6 +373,33 @@ pub(super) fn update_yaml_cookie_values(
         log::debug!("update_yaml_cookie_values: skipping tdid (no updated value)");
     }
 
+    // OAuth tokens under `psl.authorization.riot-client` (only set when rotated).
+    // The trailing `:` keeps `refresh_token` from matching `refresh_token_write_count`.
+    let token_updates: &[(&str, &Option<String>)] = &[
+        ("refresh_token", &cookies.refresh_token),
+        ("id_token", &cookies.id_token),
+    ];
+    for &(key, token_value) in token_updates {
+        let Some(new_val) = token_value else {
+            continue;
+        };
+        let pattern = format!(r#"(?m)^(\s+{}:\s*)"[^"]*""#, regex::escape(key));
+        if let Ok(re) = regex::Regex::new(&pattern) {
+            let had_match = re.is_match(&result);
+            result = re
+                .replace(&result, |caps: &regex::Captures| {
+                    format!("{}\"{}\"", &caps[1], new_val)
+                })
+                .to_string();
+            log::debug!(
+                "update_yaml_cookie_values: {} {} ({} chars)",
+                if had_match { "replaced" } else { "no match for" },
+                key,
+                new_val.len()
+            );
+        }
+    }
+
     let changed = content != result;
     log::debug!(
         "update_yaml_cookie_values: done, content_changed={}",
@@ -424,4 +465,110 @@ pub(super) fn save_account_cookies(
         account_id
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const COOKIE_SESSION_YAML: &str = r#"riot-login:
+    persist:
+        session:
+            cookies:
+            -   domain: "auth.riotgames.com"
+                name: "ssid"
+                value: "old-ssid"
+            -   domain: "auth.riotgames.com"
+                name: "clid"
+                value: "ap1"
+rso-authenticator:
+    tdid:
+        name: "tdid"
+        value: "tdid-1"
+"#;
+
+    const OAUTH_SESSION_YAML: &str = r#"psl:
+    authorization:
+        riot-client:
+            claims: []
+            id_token: "old-id"
+            is_dpop_bound: false
+            refresh_token: "old-rt"
+            refresh_token_write_count: 1
+            refresh_tokens_session_id: "session-1"
+riot-login:
+    persist: null
+rso-authenticator:
+    tdid:
+        name: "tdid"
+        value: "tdid-1"
+"#;
+
+    fn parse(yaml: &str) -> crate::shop::RiotCookies {
+        let doc: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        parse_riot_cookies(&doc)
+    }
+
+    #[test]
+    fn test_parse_cookie_session() {
+        let cookies = parse(COOKIE_SESSION_YAML);
+        assert_eq!(cookies.ssid.as_deref(), Some("old-ssid"));
+        assert_eq!(cookies.clid.as_deref(), Some("ap1"));
+        assert_eq!(cookies.tdid.as_deref(), Some("tdid-1"));
+        assert_eq!(cookies.refresh_token, None);
+        assert!(cookies.has_session());
+    }
+
+    #[test]
+    fn test_parse_oauth_session() {
+        let cookies = parse(OAUTH_SESSION_YAML);
+        assert_eq!(cookies.ssid, None);
+        assert_eq!(cookies.refresh_token.as_deref(), Some("old-rt"));
+        assert_eq!(cookies.id_token.as_deref(), Some("old-id"));
+        assert_eq!(cookies.tdid.as_deref(), Some("tdid-1"));
+        assert!(cookies.has_session());
+    }
+
+    #[test]
+    fn test_parse_without_session() {
+        let cookies = parse("riot-login:\n    persist: null\n");
+        assert!(!cookies.has_session());
+    }
+
+    #[test]
+    fn test_update_yaml_without_rotation_keeps_content() {
+        // Unrotated tokens come back as None and must not trigger a write.
+        let updated = crate::shop::RiotCookies {
+            tdid: Some("tdid-1".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(update_yaml_cookie_values(OAUTH_SESSION_YAML, &updated), OAUTH_SESSION_YAML);
+    }
+
+    #[test]
+    fn test_update_yaml_writes_rotated_tokens() {
+        let updated = crate::shop::RiotCookies {
+            refresh_token: Some("new-rt".to_string()),
+            id_token: Some("new-id".to_string()),
+            ..Default::default()
+        };
+        let result = update_yaml_cookie_values(OAUTH_SESSION_YAML, &updated);
+        let expected = OAUTH_SESSION_YAML
+            .replace("refresh_token: \"old-rt\"", "refresh_token: \"new-rt\"")
+            .replace("id_token: \"old-id\"", "id_token: \"new-id\"");
+        assert_eq!(result, expected);
+        assert!(result.contains("refresh_token_write_count: 1"));
+        assert!(result.contains("refresh_tokens_session_id: \"session-1\""));
+    }
+
+    #[test]
+    fn test_update_yaml_replaces_ssid_cookie() {
+        let updated = crate::shop::RiotCookies {
+            ssid: Some("new-ssid".to_string()),
+            ..Default::default()
+        };
+        let result = update_yaml_cookie_values(COOKIE_SESSION_YAML, &updated);
+        assert!(result.contains("value: \"new-ssid\""));
+        assert!(!result.contains("old-ssid"));
+    }
 }

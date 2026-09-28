@@ -32,8 +32,17 @@ pub async fn get_shop(
         );
     }
 
+    // The Region setting is only a shard fallback, so a settings read failure is non-fatal
+    let region_setting = match crate::db::get_settings() {
+        Ok(settings) => settings.region,
+        Err(e) => {
+            log::warn!("get_shop: failed to read Region setting: {}", e);
+            None
+        }
+    };
+
     log::debug!("get_shop: fetching storefront for account {}", account_id);
-    let (storefront, updated_cookies) = crate::shop::fetch_storefront(cookies)
+    let (storefront, updated_cookies) = crate::shop::fetch_storefront(cookies, region_setting.as_deref())
         .await
         .map_err(|e| e.to_string())?;
 

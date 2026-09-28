@@ -6,8 +6,11 @@ use reqwest::Client;
 use serde::Deserialize;
 
 use super::error::ShopError;
+use super::region::resolve_shard;
 use super::storefront::{extract_access_token, parse_storefront};
-use super::types::{ApiStorefront, EntitlementsResponse, RiotCookies, Storefront, UserInfoResponse};
+use super::types::{
+    ApiStorefront, EntitlementsResponse, RiotCookies, Storefront, TokenResponse, UserInfoResponse,
+};
 
 const VALORANT_API_BUNDLE_URL: &str = "https://valorant-api.com/v1/bundles/";
 
@@ -44,6 +47,9 @@ async fn fetch_bundle_display_name(uuid: &str) -> Option<String> {
 
 const AUTH_COOKIES_URL: &str = "https://auth.riotgames.com/api/v1/authorization";
 const AUTH_REAUTH_URL: &str = "https://auth.riotgames.com/authorize";
+const AUTH_TOKEN_URL: &str = "https://auth.riotgames.com/token";
+/// OAuth client ID the Riot Client uses for its persisted refresh token.
+const RIOT_CLIENT_ID: &str = "riot-client";
 const ENTITLEMENTS_URL: &str = "https://entitlements.auth.riotgames.com/api/token/v1";
 const USERINFO_URL: &str = "https://auth.riotgames.com/userinfo";
 
@@ -59,16 +65,36 @@ const AUTH_PARAMS: &[(&str, &str)] = &[
     ("scope", "account openid"),
 ];
 
-/// Derive the shard from the `clid` cookie value by stripping trailing digits.
+/// Tokens issued by the refresh_token grant that differ from the persisted ones.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct RotatedTokens {
+    pub(super) refresh_token: String,
+    pub(super) id_token: Option<String>,
+}
+
+/// Return the new tokens only when the server rotated the refresh token.
 ///
-/// Examples: "ap1" -> "ap", "na1" -> "na", "eu3" -> "eu", "kr" -> "kr"
-pub(super) fn shard_from_clid(clid: &str) -> &str {
-    clid.trim_end_matches(|c: char| c.is_ascii_digit())
+/// When the refresh token is unchanged, the persisted YAML stays valid and
+/// nothing needs to be written back.
+pub(super) fn detect_rotation(
+    original_refresh_token: &str,
+    resp: &TokenResponse,
+) -> Option<RotatedTokens> {
+    match resp.refresh_token.as_deref() {
+        Some(new_rt) if new_rt != original_refresh_token => Some(RotatedTokens {
+            refresh_token: new_rt.to_string(),
+            id_token: resp.id_token.clone(),
+        }),
+        _ => None,
+    }
 }
 
 pub(super) struct ShopClient {
     shard: String,
     puuid: Option<String>,
+    has_ssid: bool,
+    refresh_token: Option<String>,
+    rotated_tokens: Option<RotatedTokens>,
     client: Client,
     jar: Arc<Jar>,
 }
@@ -77,13 +103,13 @@ impl ShopClient {
     pub(super) fn new(
         cookies: RiotCookies,
         user_agent: &str,
+        region_setting: Option<&str>,
     ) -> Result<Self, ShopError> {
-        let shard = cookies
-            .clid
-            .as_deref()
-            .map(shard_from_clid)
-            .unwrap_or("ap")
-            .to_string();
+        let shard = resolve_shard(
+            cookies.clid.as_deref(),
+            cookies.id_token.as_deref(),
+            region_setting,
+        );
 
         let puuid = cookies.sub.clone();
 
@@ -128,12 +154,65 @@ impl ShopClient {
         Ok(Self {
             shard,
             puuid,
+            has_ssid: cookies.ssid.is_some(),
+            refresh_token: cookies.refresh_token,
+            rotated_tokens: None,
             client,
             jar: jar_ref,
         })
     }
 
-    async fn authenticate(&self) -> Result<String, ShopError> {
+    /// Obtain an access token, preferring the cookie session when present.
+    async fn authenticate(&mut self) -> Result<String, ShopError> {
+        if self.has_ssid {
+            log::debug!("authenticate: using ssid cookie reauth");
+            return self.authenticate_with_cookies().await;
+        }
+        if let Some(refresh_token) = self.refresh_token.clone() {
+            log::debug!("authenticate: using riot-client refresh_token grant");
+            return self.authenticate_with_refresh_token(&refresh_token).await;
+        }
+        Err(ShopError::AuthFailed(
+            "No ssid cookie or refresh token available".to_string(),
+        ))
+    }
+
+    async fn authenticate_with_refresh_token(
+        &mut self,
+        refresh_token: &str,
+    ) -> Result<String, ShopError> {
+        let resp = self
+            .client
+            .post(AUTH_TOKEN_URL)
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+                ("client_id", RIOT_CLIENT_ID),
+            ])
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            // Error bodies carry no tokens (e.g. {"error":"invalid_grant"})
+            let body = resp.text().await.unwrap_or_default();
+            return Err(ShopError::AuthFailed(format!(
+                "Token refresh failed with {}: {}",
+                status.as_u16(),
+                body.chars().take(200).collect::<String>()
+            )));
+        }
+
+        let data: TokenResponse = resp.json().await?;
+        self.rotated_tokens = detect_rotation(refresh_token, &data);
+        log::debug!(
+            "authenticate_with_refresh_token: success (refresh_token rotated={})",
+            self.rotated_tokens.is_some()
+        );
+        Ok(data.access_token)
+    }
+
+    async fn authenticate_with_cookies(&self) -> Result<String, ShopError> {
         let auth_body = serde_json::json!({
             "client_id": "play-valorant-web-prod",
             "nonce": "1",
@@ -271,7 +350,7 @@ impl ShopClient {
         Err(ShopError::StorefrontFailed)
     }
 
-    pub(super) async fn fetch(&self, client_version: &str) -> Result<Storefront, ShopError> {
+    pub(super) async fn fetch(&mut self, client_version: &str) -> Result<Storefront, ShopError> {
         let access_token = self.authenticate().await?;
         let entitlements_token = self.get_entitlements_token(&access_token).await?;
 
@@ -314,21 +393,19 @@ impl ShopClient {
     /// Extract the current cookie values from the jar after authentication.
     ///
     /// The auth flow may have updated cookies via Set-Cookie headers; this
-    /// reads them back so the caller can persist them.
+    /// reads them back so the caller can persist them. Rotated OAuth tokens
+    /// are included as well; unchanged tokens are left as `None`.
     pub(super) fn extract_updated_cookies(&self) -> RiotCookies {
         log::debug!("Extracting updated cookies from jar");
         let auth_url: reqwest::Url = RIOT_AUTH_URL.parse().expect("constant URL is valid");
         let riot_url: reqwest::Url = RIOT_GAMES_URL.parse().expect("constant URL is valid");
 
-        let mut cookies = RiotCookies {
-            asid: None,
-            ccid: None,
-            clid: None,
-            sub: None,
-            csid: None,
-            ssid: None,
-            tdid: None,
-        };
+        let mut cookies = RiotCookies::default();
+
+        if let Some(rotated) = &self.rotated_tokens {
+            cookies.refresh_token = Some(rotated.refresh_token.clone());
+            cookies.id_token = rotated.id_token.clone();
+        }
 
         if let Some(header) = self.jar.cookies(&auth_url) {
             let header_str = header.to_str().unwrap_or("");
@@ -376,6 +453,8 @@ impl ShopClient {
             cookies.clid.as_ref().map(|_| "clid"),
             cookies.sub.as_ref().map(|_| "sub"),
             cookies.tdid.as_ref().map(|_| "tdid"),
+            cookies.refresh_token.as_ref().map(|_| "refresh_token"),
+            cookies.id_token.as_ref().map(|_| "id_token"),
         ]
         .into_iter()
         .flatten()
@@ -383,5 +462,42 @@ impl ShopClient {
         log::debug!("Extracted cookies summary: [{}]", present.join(", "));
 
         cookies
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn token_response(refresh_token: Option<&str>, id_token: Option<&str>) -> TokenResponse {
+        TokenResponse {
+            access_token: "at".to_string(),
+            refresh_token: refresh_token.map(str::to_string),
+            id_token: id_token.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn test_detect_rotation_unchanged_refresh_token() {
+        let resp = token_response(Some("rt-1"), Some("id-new"));
+        assert_eq!(detect_rotation("rt-1", &resp), None);
+    }
+
+    #[test]
+    fn test_detect_rotation_missing_refresh_token() {
+        let resp = token_response(None, Some("id-new"));
+        assert_eq!(detect_rotation("rt-1", &resp), None);
+    }
+
+    #[test]
+    fn test_detect_rotation_rotated_refresh_token() {
+        let resp = token_response(Some("rt-2"), Some("id-new"));
+        assert_eq!(
+            detect_rotation("rt-1", &resp),
+            Some(RotatedTokens {
+                refresh_token: "rt-2".to_string(),
+                id_token: Some("id-new".to_string()),
+            })
+        );
     }
 }

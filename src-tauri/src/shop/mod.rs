@@ -1,6 +1,7 @@
 mod cache;
 mod client;
 mod error;
+mod region;
 mod storefront;
 mod types;
 mod version;
@@ -16,11 +17,15 @@ use version::fetch_version_info;
 /// Fetch the Valorant daily shop and night market using account cookies.
 ///
 /// # Arguments
-/// * `cookies` - Riot account cookies parsed from RiotGamesPrivateSettings.yaml.
+/// * `cookies` - Riot account session parsed from RiotGamesPrivateSettings.yaml.
+/// * `region_setting` - The Region setting, used as a shard fallback.
 ///
-/// The shard is derived from `clid` (e.g. "ap1" -> "ap") and the PUUID from `sub`.
+/// The shard is resolved from `clid` (e.g. "ap1" -> "ap"), then the `id_token`
+/// `lol_region` claim, then `region_setting`. The PUUID comes from `sub` or
+/// the userinfo endpoint.
 pub async fn fetch_storefront(
     cookies: RiotCookies,
+    region_setting: Option<&str>,
 ) -> Result<(Storefront, RiotCookies), ShopError> {
     log::debug!("fetch_storefront: starting version info fetch");
     let info = fetch_version_info().await?;
@@ -30,7 +35,7 @@ pub async fn fetch_storefront(
         info.user_agent
     );
 
-    let shop_client = ShopClient::new(cookies, &info.user_agent)?;
+    let mut shop_client = ShopClient::new(cookies, &info.user_agent, region_setting)?;
     log::debug!("fetch_storefront: ShopClient created, fetching storefront");
 
     let storefront = shop_client.fetch(&info.client_version).await?;
@@ -48,15 +53,6 @@ pub async fn fetch_storefront(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_shard_from_clid() {
-        assert_eq!(client::shard_from_clid("ap1"), "ap");
-        assert_eq!(client::shard_from_clid("na1"), "na");
-        assert_eq!(client::shard_from_clid("eu3"), "eu");
-        assert_eq!(client::shard_from_clid("kr"), "kr");
-        assert_eq!(client::shard_from_clid(""), "");
-    }
-
     /// Parse RiotGamesPrivateSettings.yaml and extract all cookies.
     fn parse_yaml_cookies(path: &str) -> RiotCookies {
         let content = std::fs::read_to_string(path)
@@ -65,47 +61,8 @@ mod tests {
         let doc: serde_yaml::Value = serde_yaml::from_str(&content)
             .unwrap_or_else(|e| panic!("Failed to parse YAML: {}", e));
 
-        let session_cookies = doc
-            .get("riot-login")
-            .and_then(|v| v.get("persist"))
-            .and_then(|v| v.get("session"))
-            .and_then(|v| v.get("cookies"))
-            .and_then(|v| v.as_sequence())
-            .expect("cookies array not found in YAML");
-
-        let mut cookies = RiotCookies {
-            asid: None,
-            ccid: None,
-            clid: None,
-            sub: None,
-            csid: None,
-            ssid: None,
-            tdid: None,
-        };
-
-        for cookie in session_cookies {
-            let name = cookie.get("name").and_then(|v| v.as_str());
-            let value = cookie.get("value").and_then(|v| v.as_str());
-            if let (Some(n), Some(v)) = (name, value) {
-                match n {
-                    "asid" => cookies.asid = Some(v.to_string()),
-                    "ccid" => cookies.ccid = Some(v.to_string()),
-                    "clid" => cookies.clid = Some(v.to_string()),
-                    "sub" => cookies.sub = Some(v.to_string()),
-                    "csid" => cookies.csid = Some(v.to_string()),
-                    "ssid" => cookies.ssid = Some(v.to_string()),
-                    _ => {}
-                }
-            }
-        }
-
-        cookies.tdid = doc
-            .get("rso-authenticator")
-            .and_then(|v| v.get("tdid"))
-            .and_then(|v| v.get("value"))
-            .and_then(|v| v.as_str())
-            .map(|v| v.to_string());
-
+        let cookies = crate::commands::cookies::parse_riot_cookies(&doc);
+        assert!(cookies.has_session(), "no session found in YAML");
         cookies
     }
 
@@ -129,11 +86,10 @@ mod tests {
         println!("  clid: {:?}", cookies.clid);
         println!("  sub:  {:?}", cookies.sub);
         println!("  tdid: {}", if cookies.tdid.is_some() { "present" } else { "missing" });
+        println!("  refresh_token: {}", if cookies.refresh_token.is_some() { "present" } else { "missing" });
 
-        let shard = cookies.clid.as_deref().map(client::shard_from_clid).unwrap_or("ap");
-        println!("  shard (derived): {}", shard);
-
-        let result = fetch_storefront(cookies).await;
+        let region_setting = std::env::var("TEST_REGION").ok();
+        let result = fetch_storefront(cookies, region_setting.as_deref()).await;
         assert!(result.is_ok(), "Storefront fetch failed: {:?}", result.unwrap_err());
 
         let (sf, updated_cookies) = result.unwrap();
@@ -141,6 +97,7 @@ mod tests {
         println!("\n--- Updated Cookies ---");
         println!("  ssid: {}", if updated_cookies.ssid.is_some() { "present" } else { "missing" });
         println!("  tdid: {}", if updated_cookies.tdid.is_some() { "present" } else { "missing" });
+        println!("  refresh_token rotated: {}", updated_cookies.refresh_token.is_some());
 
         println!("\n--- Daily Shop ({} sec remaining) ---", sf.daily_remaining_secs);
         for o in &sf.daily_offers {
